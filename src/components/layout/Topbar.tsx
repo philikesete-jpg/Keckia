@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Search,
   Bell,
@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { NotificationItem } from '../../types';
+import { ERITREA_TIME_ZONE, parseFeedDate } from '../../../shared/feedSchema';
 import { BRAND } from '../../../shared/brand';
 import { BrandMark } from '../brand/BrandLogo';
 import { ROLES, getRoleDefinition, type RoleKey } from '../../../shared/roles';
@@ -97,13 +98,25 @@ export const Topbar: React.FC<TopbarProps> = ({
   const unreadNotifications = (notifications || []).filter((n) => !n.read);
   const urgentCount = urgentAlertCount || (notifications || []).filter((n) => n.priority === 'urgent' && !n.read).length;
 
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      setNow(new Date());
+      timer = setTimeout(tick, 60000 - Date.now() % 60000);
+    };
+    tick();
+    window.addEventListener('focus', tickOnFocus);
+    function tickOnFocus() { clearTimeout(timer); tick(); }
+    return () => { clearTimeout(timer); window.removeEventListener('focus', tickOnFocus); };
+  }, []);
   const todayFormatted = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Africa/Asmara',
+    timeZone: ERITREA_TIME_ZONE,
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date());
+  }).format(now);
 
   return (
     <header
@@ -125,7 +138,7 @@ export const Topbar: React.FC<TopbarProps> = ({
               <Calendar className="w-3 h-3 text-brand-500" /> {todayFormatted}
             </span>
             <span>·</span>
-            <span>Africa/Asmara (UTC+3)</span>
+            <span>{parseFeedDate(now.toISOString()).timeString} EAT</span>
           </div>
         </div>
 
@@ -136,7 +149,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             <span className="text-slate-300">·</span>
             <span className="text-[10px] font-mono font-medium text-slate-600">
               {lastSuccessfulFeedTime
-                ? `Feed: ${new Date(lastSuccessfulFeedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                ? `Feed: ${parseFeedDate(lastSuccessfulFeedTime).timeString}`
                 : 'No review imported'}
             </span>
           </div>

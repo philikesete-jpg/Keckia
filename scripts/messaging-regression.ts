@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Isolated test database: remove connection configuration before loading app code.
 import assert from 'node:assert/strict';
 for (const key of Object.keys(process.env)) {
@@ -14,7 +15,7 @@ const people = await db.insert(users).values([
   { username: 'test-agent-c', fullName: 'Test Agent C', role: 'AGENT', passwordHash: 'unused' },
   { username: 'test-ceo', fullName: 'Test Admin', role: 'CEO', passwordHash: 'unused' },
 ]).returning();
-for (const person of people) await db.insert(sessions).values({ token: `test-session-${person.id}`, userId: person.id, expiresAt: new Date(Date.now() + 60000) });
+for (const person of people) await db.insert(sessions).values({ token: "sha256:" + createHash("sha256").update(`test-session-${person.id}`).digest("hex"), userId: person.id, expiresAt: new Date(Date.now() + 60000) });
 const [a, b, c, admin] = people;
 const call = (actor: any, method: string, path: string, body?: any, query = {}) => handleApi({ method, path: `messaging/${path}`, body, query, cookies: {}, headers: actor ? { authorization: `Bearer test-session-${actor.id}` } : {} });
 assert.equal((await call(null, 'GET', 'accounts')).status, 401, 'No automatic CEO fallback for private messages');

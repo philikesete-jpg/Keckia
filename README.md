@@ -31,8 +31,7 @@ Netlify Functions, and the site's managed Netlify Database connection. Link the
 repository to the Netlify site before starting local development so the CLI can
 load the site's development configuration.
 
-Sign in as `admin` with the password below. You will be asked to choose your own
-password immediately, then offered the sample Eritrea dataset.
+Use the first-time administrator setup below.
 
 ## Deploying to Netlify
 
@@ -40,30 +39,16 @@ password immediately, then offered the sample Eritrea dataset.
    Build settings come from `netlify.toml` (`npm run build`, publish `dist`).
 2. Deploy. Netlify Database is provisioned on first connection and applies the
    migrations in `netlify/database/migrations` automatically.
-3. On the first sign-in the staff roster is created.
+3. Configure the first administrator as described below.
 4. Optional: set `GEMINI_API_KEY` in **Site configuration → Environment
    variables** to enable AI drafting of VoA letters and itineraries. Without it
    those buttons fall back to fixed EritreaVisit templates and still work.
 
-## Starting accounts
+## First staff sign-in
 
-Created once, on first use. **Every one of them must set a new password at first
-sign-in**, and the CEO account manages the rest of the team from Staff Accounts.
+Set `ERITREAVISIT_BOOTSTRAP_PASSWORD` to a unique temporary password of at least 16 characters in the production Functions environment. Sign in as `admin` and set your permanent password. Remove the temporary setting after activation. This setting cannot reset an administrator who already has a private password.
 
-| Username | Role | First password |
-| --- | --- | --- |
-| admin | CEO / Administrator | `Admin@2026!` |
-| operations | Operations Manager | `Operations@2026!` |
-| finance | Finance Manager | `Finance@2026!` |
-| accountant | Accountant | `Accountant@2026!` |
-| tourops | Tour Operations | `TourOps@2026!` |
-| hr | HR Officer | `HrOffice@2026!` |
-| agent1–agent3 | Sales Agent | `Agent1@2026!` … |
-| guide1 | Tour Guide | `Guide1@2026!` |
-| driver1 | Driver | `Driver1@2026!` |
-
-Delete the accounts you don't need from Staff Accounts — a deleted account is
-never recreated.
+Create individual accounts and assign roles in Staff Accounts. Reset any historical account that still uses a published starter password before the staff member signs in. The release requires everyone to sign in again.
 
 ## Who can do what
 

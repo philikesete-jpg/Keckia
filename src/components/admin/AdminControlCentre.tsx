@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Activity,
+  CalendarDays,
   DatabaseBackup,
   RefreshCw,
   Settings2,
@@ -121,7 +122,7 @@ import { DailyReviewFeedPanel } from './DailyReviewFeedPanel';
 
 /* ------------------------------------------------------------------ */
 
-export const AdminControlCentre: React.FC = () => {
+export const AdminControlCentre: React.FC<{ onImportCalendar: () => void }> = ({ onImportCalendar }) => {
   const { user } = useWorkspace();
   const [tab, setTab] = useState('feed');
 
@@ -162,7 +163,7 @@ export const AdminControlCentre: React.FC = () => {
       <PageHeader
         title="Admin Control Centre"
         subtitle="Operational feed review, system settings, database management, and agency configuration."
-        actions={<Badge tone="brand">Administrator</Badge>}
+        actions={<Button icon={CalendarDays} onClick={onImportCalendar}>Import Google Calendar</Button>}
       />
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} className="mb-5" />

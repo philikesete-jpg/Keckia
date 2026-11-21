@@ -310,90 +310,71 @@ export interface ParsedDateInfo {
   raw: any;
 }
 
+export const ERITREA_TIME_ZONE = 'Africa/Asmara';
+
+const eritreaDay = new Intl.DateTimeFormat('en-CA', {
+  timeZone: ERITREA_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const eritreaClock = new Intl.DateTimeFormat('en-US', {
+  timeZone: ERITREA_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true,
+});
+
+export function eritreaDateString(date = new Date()): string {
+  const parts = Object.fromEntries(eritreaDay.formatToParts(date).map(p => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+// Resolve an ISO wall time using its calendar's zone, independently of the device's zone.
+export function calendarInstant(value: string, zone = ERITREA_TIME_ZONE): Date {
+  if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/i.test(value)) {
+    return new Date(value);
+  }
+  const wall = Date.parse(value + 'Z');
+  if (!Number.isFinite(wall)) return new Date(NaN);
+  const offsetFormat = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' });
+  const offsetAt = (instant: number) => {
+    const offset = offsetFormat.formatToParts(instant).find(p => p.type === 'timeZoneName')?.value;
+    const match = offset?.match(/^GMT([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return 0;
+    const seconds = Number(match[2]) * 3600 + Number(match[3]) * 60 + Number(match[4] || 0);
+    return (match[1] === '-' ? -1 : 1) * seconds * 1000;
+  };
+  // At a DST overlap use the earlier occurrence. In a gap advance by the skipped hour.
+  const before = offsetAt(wall - 86400000);
+  const candidate = wall - before;
+  if (offsetAt(candidate) === before) return new Date(candidate);
+  const after = offsetAt(wall + 86400000);
+  const laterOffsetCandidate = wall - after;
+  return new Date(offsetAt(laterOffsetCandidate) === after ? laterOffsetCandidate : candidate);
+}
+
 export function parseFeedDate(
   raw: FeedDateOrString | undefined | null,
-  fallbackTimezone: string = 'Africa/Asmara'
+  fallbackTimezone = ERITREA_TIME_ZONE,
 ): ParsedDateInfo {
-  if (!raw) {
-    const now = new Date();
-    return {
-      iso: now.toISOString(),
-      dateString: now.toISOString().split('T')[0],
-      timeString: '00:00',
-      isAllDay: false,
-      isMidnight: false,
-      timeZone: fallbackTimezone,
-      raw: null,
-    };
+  const timeZone = (raw && typeof raw === 'object' && raw.timeZone) || fallbackTimezone;
+  const value = (typeof raw === 'string' ? raw : raw?.dateTime || raw?.date || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return { iso: `${value}T00:00:00.000Z`, dateString: value, timeString: 'All Day',
+      isAllDay: true, isMidnight: false, timeZone, raw };
   }
-
-  // Google all-day date: { date: "2026-11-05" }
-  if (typeof raw === 'object' && raw.date && !raw.dateTime) {
-    const dateStr = String(raw.date).trim();
-    return {
-      iso: `${dateStr}T00:00:00.000Z`,
-      dateString: dateStr,
-      timeString: 'All Day',
-      isAllDay: true,
-      isMidnight: false,
-      timeZone: raw.timeZone || fallbackTimezone,
-      raw,
-    };
-  }
-
-  let dateObj: Date;
-  let dateStr = '';
-  let timeStr = '00:00';
-  let isAllDay = false;
-  let isMidnight = false;
-  const timeZone = typeof raw === 'object' && raw.timeZone ? raw.timeZone : fallbackTimezone;
-
-  if (typeof raw === 'object' && raw.dateTime) {
-    dateObj = new Date(raw.dateTime);
-    if (isNaN(dateObj.getTime())) {
-      dateObj = new Date();
-    }
-  } else if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      return {
-        iso: `${trimmed}T00:00:00.000Z`,
-        dateString: trimmed,
-        timeString: 'All Day',
-        isAllDay: true,
-        isMidnight: false,
-        timeZone: fallbackTimezone,
-        raw,
-      };
-    }
-    dateObj = new Date(trimmed);
-    if (isNaN(dateObj.getTime())) {
-      dateObj = new Date();
-    }
-  } else {
-    dateObj = new Date();
-  }
-
+  let instant: Date;
   try {
-    const hours = dateObj.getHours();
-    const minutes = dateObj.getMinutes();
-    isMidnight = hours === 0 && minutes <= 59;
-    dateStr = dateObj.toISOString().split('T')[0];
-    timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    instant = calendarInstant(value, timeZone);
   } catch {
-    dateStr = new Date().toISOString().split('T')[0];
-    timeStr = '00:00';
+    // Older feed records may carry a label instead of an IANA timezone.
+    instant = calendarInstant(value, ERITREA_TIME_ZONE);
   }
+  const valid = Number.isFinite(instant.getTime());
+  const date = valid ? instant : new Date();
+  const timeString = valid ? eritreaClock.format(date).replace(/\s+/g, ' ') : '—';
+  return { iso: date.toISOString(), dateString: eritreaDateString(date), timeString,
+    isAllDay: false, isMidnight: /^12:\d{2} AM$/.test(timeString), timeZone, raw };
+}
 
-  return {
-    iso: dateObj.toISOString(),
-    dateString: dateStr,
-    timeString: timeStr,
-    isAllDay,
-    isMidnight,
-    timeZone,
-    raw,
-  };
+export function formatEritreaDateTime(value: string): string {
+  const parsed = parseFeedDate(value);
+  return parsed.isAllDay ? parsed.dateString : `${parsed.dateString} · ${parsed.timeString} EAT`;
 }
 
 export function getEventUniqueKey(event: { id: string; calendarId?: string }): string {
@@ -562,7 +543,7 @@ export function normalizeFeedEvent(
 
   // If dailyCityMap is not provided, populate only if single-day or explicit day breakdown
   const parsedStartStr = parsedStart.dateString;
-  const parsedEnd = rawEvent?.end ? parseFeedDate(rawEvent.end) : parsedStart;
+  const parsedEnd = rawEvent?.end ? parseFeedDate(rawEvent.end, rawEvent.timeZone) : parsedStart;
   const isSingleDay = parsedStartStr === parsedEnd.dateString;
 
   if (isSingleDay && cities.length === 1 && !dailyCityMap[parsedStartStr]) {
@@ -640,8 +621,8 @@ export function getCityForDate(event: FeedEvent, dateString: string): string {
   }
 
   // 3. Single-day event with a single city
-  const pStart = parseFeedDate(event.start);
-  const pEnd = event.end ? parseFeedDate(event.end) : pStart;
+  const pStart = parseFeedDate(event.start, event.timeZone);
+  const pEnd = event.end ? parseFeedDate(event.end, event.timeZone) : pStart;
   if (pStart.dateString === pEnd.dateString && event.cities && event.cities.length === 1) {
     if (pStart.dateString === dateString) {
       return event.cities[0];

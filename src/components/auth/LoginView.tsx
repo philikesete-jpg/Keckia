@@ -7,7 +7,7 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { BRAND } from '../../../shared/brand';
-import { api, ApiError, setAuthToken } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 import type { WorkspaceUser } from '../../lib/workspace';
 import { BrandLockup, BrandLogoImage } from '../brand/BrandLogo';
 
@@ -16,8 +16,8 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
-  const [username, setUsername] = useState('admin@eritreavisit.com');
-  const [password, setPassword] = useState('Admin@2026!');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,13 +28,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post<{ user?: WorkspaceUser; token?: string }>('auth/login', {
+      const res = await api.post<{ user?: WorkspaceUser }>('auth/login', {
         username: userToSubmit.trim(),
         password: passToSubmit,
       });
-      if (res?.token) {
-        setAuthToken(res.token);
-      }
       if (res?.user) {
         onSignedIn(res.user);
       } else {
@@ -54,14 +51,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
       .then((health) => {
         if (!cancelled && !health.database.connected) {
           setDbProblem(health.database.message);
-        } else if (!cancelled) {
-          performLogin('admin@eritreavisit.com', 'Admin@2026!');
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          performLogin('admin@eritreavisit.com', 'Admin@2026!');
-        }
+        if (!cancelled) setDbProblem('Could not check the database connection.');
       });
     return () => {
       cancelled = true;

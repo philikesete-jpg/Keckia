@@ -31,6 +31,8 @@ createServer(async (req, res) => {
       method: req.method ?? "GET",
       path: url.pathname.replace(/^\/api\/?/, ""),
       query: Object.fromEntries(url.searchParams.entries()),
+      headers: req.headers,
+      rawBody: raw,
       body: raw ? JSON.parse(raw) : undefined,
       cookies,
     };

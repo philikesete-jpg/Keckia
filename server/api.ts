@@ -3,7 +3,7 @@
  * Dev. Both environments therefore enforce exactly the same rules.
  */
 import { handleMessaging } from "./messaging.ts";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { GoogleGenAI, Type } from "@google/genai";
 import { getDb, checkDatabase, DatabaseUnavailableError } from "../db/index.ts";
@@ -45,6 +45,7 @@ export interface ApiRequest {
   body: any;
   cookies: Record<string, string>;
   headers?: Record<string, any>;
+  rawBody?: string;
 }
 
 export interface ApiResponse {
@@ -105,25 +106,34 @@ export const SEED_USERS = [
 
 export const DEFAULT_SEED_PASSWORDS = new Set(SEED_USERS.map((u) => u.password));
 
-async function ensureSeedUsers() {
-  const db = await getDb();
-  // Check if any users already exist. If so, do not add or overwrite.
-  const existingCount = await db.select({ count: sql<number>`count(*)::int` }).from(users);
-  if (existingCount[0]?.count && Number(existingCount[0].count) > 0) {
-    return;
-  }
+// Published historical passwords are denylisted, including for pre-existing accounts.
+function allowedPassword(password: string): boolean {
+  return password.length >= 8 && !DEFAULT_SEED_PASSWORDS.has(password);
+}
 
-  for (const u of SEED_USERS) {
-    await db.insert(users).values({
-      username: u.username,
-      email: u.email,
-      fullName: u.fullName,
-      role: u.role,
-      passwordHash: hashPassword(u.password),
-      mustChangePassword: 0,
-      active: 1,
-    }).onConflictDoNothing();
+async function activateOwner(identifier: string, password: string) {
+  if (identifier !== "admin" && identifier !== "admin@eritreavisit.com") return;
+  const initial = process.env.ERITREAVISIT_BOOTSTRAP_PASSWORD;
+  if (!initial || initial.length < 16 || !allowedPassword(initial)) return;
+  const digest = (s: string) => createHash("sha256").update(s).digest();
+  if (!timingSafeEqual(digest(initial), digest(password))) return;
+
+  const db = await getDb();
+  const [owner] = await db.select().from(users).where(eq(users.username, "admin")).limit(1);
+  const update = { passwordHash: hashPassword(initial), mustChangePassword: 1 };
+  if (!owner) {
+    const [existingOwner] = await db.select({ id: users.id }).from(users).where(eq(users.role, "CEO")).limit(1);
+    if (!existingOwner) {
+      await db.insert(users).values({ username: "admin", email: "admin@eritreavisit.com",
+        fullName: "Phil — Managing Director", role: "CEO", ...update }).onConflictDoNothing();
+    }
+  } else if (owner.active === 1 && owner.role === "CEO" && verifyPassword(SEED_USERS[0].password, owner.passwordHash)) {
+    await db.update(users).set(update).where(and(eq(users.id, owner.id), eq(users.passwordHash, owner.passwordHash)));
   }
+}
+
+function sessionDigest(token: string) {
+  return "sha256:" + createHash("sha256").update(token).digest("hex");
 }
 
 export interface SessionUser {
@@ -168,45 +178,14 @@ export function extractToken(req: ApiRequest): string | null {
   return null;
 }
 
-const inMemorySessions = new Map<string, { user: SessionUser; expiresAt: number }>();
-
-async function sessionUser(req: ApiRequest, requireSession = false): Promise<SessionUser | null> {
+async function sessionUser(req: ApiRequest): Promise<SessionUser | null> {
   const token = extractToken(req);
-  if (token && token !== "signed_out") {
-    const mem = inMemorySessions.get(token);
-    if (mem && mem.expiresAt > Date.now()) {
-      return mem.user;
-    }
-  }
+  if (!token || token === "signed_out") return null;
   const db = await getDb();
-  if (token && token !== "signed_out") {
-    const [row] = await db
-      .select()
-      .from(sessions)
-      .innerJoin(users, eq(sessions.userId, users.id))
-      .where(eq(sessions.token, token))
-      .limit(1);
-    if (row) {
-      if (new Date(row.sessions.expiresAt).getTime() < Date.now() || row.users.active !== 1) {
-        await db.delete(sessions).where(eq(sessions.token, token));
-      } else {
-        return publicUser(row.users);
-      }
-    }
-  }
-  if (requireSession || token === "signed_out") {
-    return null;
-  }
-  // Automatically resolve the primary CEO Administrator session so the workspace opens ready out-of-the-box
-  const [ceoRow] = await db
-    .select()
-    .from(users)
-    .where(and(eq(users.role, "CEO"), eq(users.active, 1)))
-    .limit(1);
-  if (ceoRow) {
-    return publicUser(ceoRow);
-  }
-  return null;
+  const [row] = await db.select().from(sessions).innerJoin(users, eq(sessions.userId, users.id))
+    .where(eq(sessions.token, sessionDigest(token))).limit(1);
+  if (!row || row.users.active !== 1 || new Date(row.sessions.expiresAt).getTime() <= Date.now()) return null;
+  return publicUser(row.users);
 }
 
 /* ------------------------------------------------------------------ *
@@ -3549,28 +3528,28 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
     });
   }
 
-  // Ensure initial seed users are populated in database (ephemeral mode only)
-  try {
-    await ensureSeedUsers();
-  } catch (err) {
-    console.warn("Could not ensure seed users:", err);
-  }
-
   /* ---------------- whatsapp public webhook ---------------- */
   if (head === "whatsapp" && rest[0] === "webhook") {
     if (req.method === "GET") {
       const mode = req.query?.["hub.mode"] || req.query?.mode;
       const token = req.query?.["hub.verify_token"] || req.query?.token;
       const challenge = req.query?.["hub.challenge"] || req.query?.challenge;
-      const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN || "eritreavisit_2917190374_token";
+      const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN;
 
-      if (mode === "subscribe" && token === expectedToken) {
+      if (expectedToken && mode === "subscribe" && token === expectedToken) {
         return ok(challenge || "verified");
       }
       return fail(403, "Invalid verification token.");
     }
 
     if (req.method === "POST") {
+      const secret = process.env.WHATSAPP_APP_SECRET;
+      if (!secret || !req.rawBody) return fail(403, "Webhook authentication required.");
+      const expected = "sha256=" + createHmac("sha256", secret).update(req.rawBody).digest("hex");
+      const provided = Buffer.from(String(req.headers?.["x-hub-signature-256"] || ""));
+      if (provided.length !== expected.length || !timingSafeEqual(provided, Buffer.from(expected))) {
+        return fail(403, "Webhook authentication failed.");
+      }
       return await handleWhatsAppInbound(req.body);
     }
   }
@@ -3585,7 +3564,9 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
       if (!identifier || !password) return fail(400, "Username and password are required.");
 
       const db = await getDb();
-      let [user] = await db
+      if (DEFAULT_SEED_PASSWORDS.has(password)) return fail(401, "Invalid username or password.");
+      await activateOwner(identifier, password);
+      const [user] = await db
         .select()
         .from(users)
         .where(sql`lower(${users.username}) = ${identifier} OR lower(${users.email}) = ${identifier}`)
@@ -3612,12 +3593,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
 
       const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000);
-      inMemorySessions.set(token, { user: publicUser(user), expiresAt: expiresAt.getTime() });
-      try {
-        await db.insert(sessions).values({ token, userId: user.id, expiresAt });
-      } catch (e) {
-        console.warn("Could not insert session into db (using in-memory):", e);
-      }
+      await db.insert(sessions).values({ token: sessionDigest(token), userId: user.id, expiresAt });
       try {
         await audit({
           actor: user.username, actorRole: user.role, action: "login",
@@ -3625,7 +3601,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
         });
       } catch {}
 
-      return ok({ user: publicUser(user), token }, {
+      return ok({ user: publicUser(user) }, {
         cookie: { name: SESSION_COOKIE, value: token, maxAge: SESSION_DAYS * 86400 },
       });
     }
@@ -3639,7 +3615,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
       const token = extractToken(req);
       if (token && token !== "signed_out") {
         const db = await getDb();
-        await db.delete(sessions).where(eq(sessions.token, token));
+        await db.delete(sessions).where(eq(sessions.token, sessionDigest(token)));
       }
       return ok({ ok: true }, {
         cookie: { name: SESSION_COOKIE, value: "signed_out", maxAge: 86400 },
@@ -3648,7 +3624,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
 
     if (action === "reset-password" && req.method === "POST") {
       const caller = await sessionUser(req);
-      if (!caller || (caller.role !== "CEO" && !isAdmin(caller.role))) {
+      if (!caller || caller.mustChangePassword || (caller.role !== "CEO" && !isAdmin(caller.role))) {
         return fail(403, "Password reset requires an authenticated CEO or Administrator.");
       }
 
@@ -3656,7 +3632,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
       const newPassword = String(req.body?.newPassword ?? "");
 
       if (!username) return fail(400, "Username or email is required.");
-      if (newPassword.length < 8) return fail(400, "The new password must be at least 8 characters.");
+      if (!allowedPassword(newPassword)) return fail(400, "The new password must be at least 8 characters.");
 
       const db = await getDb();
       const [targetUser] = await db
@@ -3692,7 +3668,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
       if (!user) return fail(401, "Sign in required.");
       const current = String(req.body?.currentPassword ?? "");
       const next = String(req.body?.newPassword ?? "");
-      if (next.length < 8) return fail(400, "The new password must be at least 8 characters.");
+      if (!allowedPassword(next)) return fail(400, "The new password must be at least 8 characters.");
 
       const db = await getDb();
       const [row] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
@@ -3705,14 +3681,14 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
         }
       }
 
-      try {
-        await db
-          .update(users)
-          .set({ passwordHash: hashPassword(next), mustChangePassword: 0 })
-          .where(eq(users.id, user.id));
-      } catch (err: any) {
-        console.warn("User password update suppressed (read-only db?):", err?.message || err);
+      if (verifyPassword(next, row.passwordHash) || next === process.env.ERITREAVISIT_BOOTSTRAP_PASSWORD) {
+        return fail(400, "Choose a different password.");
       }
+      const changed = await db.update(users).set({ passwordHash: hashPassword(next), mustChangePassword: 0 })
+        .where(and(eq(users.id, user.id), eq(users.passwordHash, row.passwordHash))).returning({ id: users.id });
+      if (!changed.length) return fail(409, "The account has changed. Sign in again.");
+      const currentSession = sessionDigest(extractToken(req)!);
+      await db.delete(sessions).where(and(eq(sessions.userId, user.id), sql`${sessions.token} <> ${currentSession}`));
       await audit({
         actor: user.username, actorRole: user.role, action: "password_change",
         summary: `${user.fullName} changed their password.`, severity: "warning",
@@ -3729,8 +3705,10 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
   }
 
   /* ---------- everything below requires a session ---------- */
-  const user = await sessionUser(req, head === "messaging");
+  const user = await sessionUser(req);
   if (!user) return fail(401, "Sign in required.");
+
+  if (user.mustChangePassword) return fail(403, "Change your password before continuing.");
 
   if (head === "messaging") {
     if (!ROLES[user.role].view.includes("messages")) return fail(403, "Messaging is unavailable for your role.");
@@ -4301,7 +4279,7 @@ Return JSON:
       const { username, email, fullName, role, password } = req.body ?? {};
       if (!username || !fullName || !role || !password) return fail(400, "Username, name, role and password are required.");
       if (!isRoleKey(role)) return fail(400, "Unknown role.");
-      if (String(password).length < 8) return fail(400, "The password must be at least 8 characters.");
+      if (!allowedPassword(String(password))) return fail(400, "The password must be at least 8 characters.");
       await db.insert(users).values({
         username: String(username).trim().toLowerCase(),
         email: email ? String(email).trim().toLowerCase() : null,
@@ -4326,7 +4304,7 @@ Return JSON:
       if (req.body?.role && isRoleKey(req.body.role)) patch.role = req.body.role;
       if (req.body?.active !== undefined) patch.active = req.body.active ? 1 : 0;
       if (req.body?.password) {
-        if (String(req.body.password).length < 8) return fail(400, "The password must be at least 8 characters.");
+        if (!allowedPassword(String(req.body.password))) return fail(400, "The password must be at least 8 characters.");
         patch.passwordHash = hashPassword(String(req.body.password));
         patch.mustChangePassword = req.body.mustChangePassword ? 1 : 0;
         await db.delete(sessions).where(eq(sessions.userId, targetId));

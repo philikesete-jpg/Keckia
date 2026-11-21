@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -44,6 +44,12 @@ import {
   getCityForDate,
 } from '../../utils/feedParser';
 
+import { eritreaDateString, formatEritreaDateTime } from '../../../shared/feedSchema';
+
+function calendarToday() {
+  return new Date(eritreaDateString() + 'T12:00:00');
+}
+
 interface CalendarWorkspaceProps {
   feedEvents?: FeedEvent[];
   feedTravelers?: FeedTraveler[];
@@ -85,7 +91,14 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
   const handleUpdateMappings = onUpdateCategoryMappings || onUpdateColorMappings;
   // Navigation & View state
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 10, 5)); // Anchor to operational window: Nov 2026
+  const [currentDate, setCurrentDate] = useState<Date>(calendarToday);
+  const [todayStr, setTodayStr] = useState(() => eritreaDateString());
+  useEffect(() => {
+    const update = () => setTodayStr(eritreaDateString());
+    const timer = window.setInterval(update, 15000);
+    window.addEventListener('focus', update);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', update); };
+  }, []);
   const [searchFilter, setSearchFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
@@ -315,7 +328,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
     if (viewMode === 'month' || viewMode === 'lanes') {
       setCurrentDate(new Date(year, month - 1, 1));
     } else {
-      setCurrentDate(new Date(currentDate.getTime() - 7 * 86400000));
+      setCurrentDate(new Date(year, month, currentDate.getDate() - 7, 12));
     }
   };
 
@@ -323,12 +336,12 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
     if (viewMode === 'month' || viewMode === 'lanes') {
       setCurrentDate(new Date(year, month + 1, 1));
     } else {
-      setCurrentDate(new Date(currentDate.getTime() + 7 * 86400000));
+      setCurrentDate(new Date(year, month, currentDate.getDate() + 7, 12));
     }
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date());
+    setCurrentDate(calendarToday());
   };
 
   // Timezone-safe local YYYY-MM-DD formatter
@@ -368,8 +381,6 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
       });
     }
 
-    const now = new Date();
-    const todayStr = formatYmd(now.getFullYear(), now.getMonth(), now.getDate());
 
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(year, month, day);
@@ -402,7 +413,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
     }
 
     return days;
-  }, [year, month]);
+  }, [year, month, todayStr]);
 
   // Week days builder (immune to UTC offset shifts)
   const weekDays = useMemo(() => {
@@ -424,8 +435,8 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
   const eventsByDate = useMemo(() => {
     const map = new Map<string, FeedEvent[]>();
     visibleEvents.forEach((evt) => {
-      const parsedStart = parseFeedDate(evt.start);
-      const parsedEnd = evt.end ? parseFeedDate(evt.end) : parsedStart;
+      const parsedStart = parseFeedDate(evt.start, evt.timeZone);
+      const parsedEnd = evt.end ? parseFeedDate(evt.end, evt.timeZone) : parsedStart;
 
       const startD = new Date(parsedStart.dateString);
       const endD = new Date(parsedEnd.dateString);
@@ -434,7 +445,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
       if (dayDiff > 0 && dayDiff <= 30) {
         for (let i = 0; i <= dayDiff; i++) {
           const temp = new Date(startD);
-          temp.setDate(startD.getDate() + i);
+          temp.setUTCDate(startD.getUTCDate() + i);
           const tempStr = temp.toISOString().split('T')[0];
           const arr = map.get(tempStr) || [];
           arr.push(evt);
@@ -479,20 +490,14 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-amber-300 font-bold uppercase tracking-wider">
               <Clock className="w-3.5 h-3.5 text-amber-400" />
-              Planned Review Schedule: 07:00 & 22:00 Africa/Asmara
+              Planned Review Schedule: 7:00 AM & 10:00 PM EAT
             </span>
             <span className="text-slate-600">|</span>
             <span className="text-slate-300 text-[11px]">
               Actual Last Feed:{' '}
               <span className="font-mono text-white font-bold">
                 {lastSuccessfulFeedTime
-                  ? new Date(lastSuccessfulFeedTime).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      timeZoneName: 'short',
-                    })
+                  ? formatEritreaDateTime(lastSuccessfulFeedTime)
                   : 'No review imported'}
               </span>
             </span>
@@ -796,7 +801,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
 
                     <div className="mt-1 space-y-1 flex-1 overflow-y-auto max-h-[90px] pr-0.5">
                       {dayEvts.slice(0, 3).map((evt) => {
-                        const parsed = parseFeedDate(evt.start);
+                        const parsed = parseFeedDate(evt.start, evt.timeZone);
                         const bgColor = evt.colorHex || '#039be5';
                         const cityOnThisDate = getCityForDate(evt, day.dateString);
 
@@ -874,7 +879,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
                 return (
                   <div key={wd.id} className="p-2.5 space-y-2 bg-white">
                     {dayEvts.map((evt) => {
-                      const p = parseFeedDate(evt.start);
+                      const p = parseFeedDate(evt.start, evt.timeZone);
                       const bgColor = evt.colorHex || '#039be5';
                       const cityOnThisDate = getCityForDate(evt, wd.dateString);
 
@@ -900,6 +905,9 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
                           </div>
 
                           <div className="font-bold text-slate-900 leading-snug">{evt.title}</div>
+                          <div className="text-[11px] text-slate-600">
+                            {p.isAllDay ? 'All Day' : p.timeString + ' EAT'}
+                          </div>
 
                           <div className="text-[11px] text-slate-600 flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-slate-400" />
@@ -957,7 +965,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
 
                     <div className="divide-y divide-slate-100">
                       {dayEvts.map((evt) => {
-                        const parsed = parseFeedDate(evt.start);
+                        const parsed = parseFeedDate(evt.start, evt.timeZone);
                         const isMidnight = parsed.isMidnight;
                         const isOvernight = evt.isOvernightTransfer;
                         const color = evt.colorHex || '#039be5';
@@ -1131,7 +1139,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
                           </span>
                         ) : (
                           travelerEvts.map((e) => {
-                            const p = parseFeedDate(e.start);
+                            const p = parseFeedDate(e.start, e.timeZone);
                             const color = e.colorHex || '#039be5';
                             const cityOnThisDate = getCityForDate(e, p.dateString);
                             return (
@@ -1175,6 +1183,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
               </span>
               <h3 className="text-xl font-serif font-bold text-slate-950 mt-0.5">
                 {new Date(selectedDayString).toLocaleDateString('en-US', {
+                  timeZone: 'UTC',
                   weekday: 'long',
                   month: 'short',
                   day: 'numeric',
@@ -1201,7 +1210,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
               </div>
             ) : (
               (eventsByDate.get(selectedDayString) || []).map((evt) => {
-                const p = parseFeedDate(evt.start);
+                const p = parseFeedDate(evt.start, evt.timeZone);
                 const color = evt.colorHex || '#039be5';
                 const cityOnThisDate = getCityForDate(evt, selectedDayString);
 
@@ -1317,13 +1326,13 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Time & Timezone:</span>
                 <span className="font-mono text-slate-900">
-                  {parseFeedDate(selectedEvent.start).timeString} ({selectedEvent.timeZone || 'Africa/Asmara'})
+                  {parseFeedDate(selectedEvent.start, selectedEvent.timeZone).timeString} {selectedEvent.allDay ? '' : 'EAT'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Actual Date City:</span>
                 <span className="font-medium text-slate-900">
-                  {getCityForDate(selectedEvent, parseFeedDate(selectedEvent.start).dateString)}
+                  {getCityForDate(selectedEvent, parseFeedDate(selectedEvent.start, selectedEvent.timeZone).dateString)}
                 </span>
               </div>
             </div>

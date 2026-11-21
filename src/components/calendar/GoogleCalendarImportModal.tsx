@@ -28,6 +28,7 @@ import {
   GOOGLE_CALENDAR_COLORS,
 } from '../../lib/googleCalendarParser';
 import { FeedEvent, TourSchedule } from '../../types';
+import { parseFeedDate } from '../../../shared/feedSchema';
 import { auth } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
@@ -56,7 +57,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
   // Input states
   const [targetAccount, setTargetAccount] = useState('philikesete@gmail.com');
   const [pastedText, setPastedText] = useState('');
-  const [monthLink, setMonthLink] = useState('https://calendar.google.com/calendar/u/0/r/month/2026/11/1?ctz=Africa/Nairobi');
+  const [monthLink, setMonthLink] = useState('https://calendar.google.com/calendar/u/0/r/month/2026/11/1?ctz=Africa/Asmara');
   const [includeDepartures, setIncludeDepartures] = useState(false);
   const clearPreview = () => { setParsedEvents([]); setSelectedIds(new Set()); setStatusMessage(null); };
   let month: ReturnType<typeof googleCalendarMonth> | undefined;
@@ -347,7 +348,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
                   onChange={e => { setMonthLink(e.target.value); clearPreview(); }}
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" />
               </label>
-              {month ? <p className="text-sm text-slate-700">{month.label} · {month.timeZone} ·{' '}
+              {month ? <p className="text-sm text-slate-700">{month.label} · Eritrea time (UTC+3) ·{' '}
                 <a className="text-emerald-700 underline" href={monthLink} target="_blank" rel="noreferrer">Open in Google Calendar</a>
               </p> : <p className="text-xs text-rose-700">Enter a valid Google Calendar month-view link and time zone.</p>}
               <label className="block text-xs font-semibold">Source calendar email or ID
@@ -458,8 +459,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
               <div className="max-h-64 overflow-y-auto space-y-2 border border-slate-200 rounded-xl p-2 bg-slate-50/50">
                 {filteredEvents.map((evt) => {
                   const isSelected = selectedIds.has(evt.id);
-                  const startDate = evt.start.includes('T') ? evt.start.split('T')[0] : evt.start;
-                  const startTime = evt.start.includes('T') ? evt.start.split('T')[1].substring(0, 5) : 'All Day';
+                  const start = parseFeedDate(evt.start);
 
                   return (
                     <div
@@ -488,7 +488,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
                           <p className="text-xs font-bold text-slate-900 truncate">{evt.summary}</p>
                           <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> {startDate} ({startTime})
+                              <Clock className="w-3 h-3" /> {start.dateString} · {start.isAllDay ? 'All Day' : start.timeString + ' EAT'}
                             </span>
                             {evt.location && (
                               <span className="flex items-center gap-1 truncate">

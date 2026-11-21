@@ -7,7 +7,7 @@
  */
 
 import { FeedEvent, TourSchedule } from '../types';
-import { AUTHENTIC_GOOGLE_COLORS, CATEGORY_COLORS } from '../../shared/feedSchema';
+import { AUTHENTIC_GOOGLE_COLORS, CATEGORY_COLORS, ERITREA_TIME_ZONE, calendarInstant, eritreaDateString, parseFeedDate } from '../../shared/feedSchema';
 
 export const GOOGLE_CALENDAR_COLORS: Record<string, { name: string; hex: string }> = {
   '1': { name: 'Lavender', hex: '#7986cb' },
@@ -90,7 +90,7 @@ export function inferCategoryAndColor(
 /**
  * Format RFC 5545 date string (e.g. 20261105T093000Z or 20261105) into ISO or YYYY-MM-DD
  */
-function parseIcsDateString(val: string): { dateStr: string; allDay: boolean } {
+function parseIcsDateString(val: string, zone = ERITREA_TIME_ZONE): { dateStr: string; allDay: boolean } {
   const clean = val.trim();
   if (clean.length === 8 && /^\d{8}$/.test(clean)) {
     // All day date YYYYMMDD
@@ -111,7 +111,7 @@ function parseIcsDateString(val: string): { dateStr: string; allDay: boolean } {
       };
     }
     return {
-      dateStr: `${y}-${m}-${d}T${hh}:${mm}:${ss}`,
+      dateStr: calendarInstant(`${y}-${m}-${d}T${hh}:${mm}:${ss}`, zone).toISOString(),
       allDay: false,
     };
   }
@@ -137,6 +137,7 @@ export function parseGoogleCalendarIcs(icsText: string): GoogleCalendarParsedEve
   const unfolded = icsText.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '');
   const lines = unfolded.split(/\r?\n/);
 
+  const calendarZone = lines.find(line => /^X-WR-TIMEZONE:/i.test(line))?.slice('X-WR-TIMEZONE:'.length).trim();
   const events: GoogleCalendarParsedEvent[] = [];
   let inEvent = false;
   let currentEvent: Record<string, string> = {};
@@ -161,9 +162,9 @@ export function parseGoogleCalendarIcs(icsText: string): GoogleCalendarParsedEve
         const location = unescapeIcs(currentEvent.LOCATION || '');
         const colorId = currentEvent['COLOR'] || currentEvent['X-GOOGLE-COLOR'];
 
-        const startParsed = parseIcsDateString(currentEvent.DTSTART || new Date().toISOString());
+        const startParsed = parseIcsDateString(currentEvent.DTSTART || new Date().toISOString(), currentEvent.DTSTART_ZONE || calendarZone);
         const endParsed = currentEvent.DTEND
-          ? parseIcsDateString(currentEvent.DTEND)
+          ? parseIcsDateString(currentEvent.DTEND, currentEvent.DTEND_ZONE || calendarZone)
           : startParsed;
 
         const cat = inferCategoryAndColor(summary, description, colorId);
@@ -209,6 +210,10 @@ export function parseGoogleCalendarIcs(icsText: string): GoogleCalendarParsedEve
           attendees.push(name);
         } else if (!currentEvent[propKey]) {
           currentEvent[propKey] = value;
+          if (propKey === 'DTSTART' || propKey === 'DTEND') {
+            const tzid = /;TZID=("[^"]+"|[^;]+)/i.exec(propFull)?.[1];
+            if (tzid) currentEvent[propKey + '_ZONE'] = tzid.replace(/^"|"$/g, '');
+          }
         }
       }
     }
@@ -254,8 +259,10 @@ export function parseGoogleCalendarJson(jsonData: any): GoogleCalendarParsedEven
     const endObj = item.end || {};
 
     const allDay = Boolean(startObj.date && !startObj.dateTime);
-    const start = startObj.dateTime || startObj.date || new Date().toISOString();
-    const end = endObj.dateTime || endObj.date || start;
+    const readDate = (entry: any) => entry.dateTime
+      ? calendarInstant(entry.dateTime, entry.timeZone || jsonData.timeZone).toISOString() : entry.date;
+    const start = readDate(startObj) || new Date().toISOString();
+    const end = readDate(endObj) || start;
 
     const cat = inferCategoryAndColor(summary, description, colorId);
 
@@ -316,8 +323,8 @@ export function toFeedEvent(event: GoogleCalendarParsedEvent): FeedEvent {
  * Convert a Google Calendar event into a TourSchedule for TourCalendarView
  */
 export function toTourSchedule(event: GoogleCalendarParsedEvent): TourSchedule {
-  const startDate = event.start.includes('T') ? event.start.split('T')[0] : event.start;
-  const endDate = event.end ? (event.end.includes('T') ? event.end.split('T')[0] : event.end) : startDate;
+  const startDate = parseFeedDate(event.start).dateString;
+  const endDate = event.end ? parseFeedDate(event.end).dateString : startDate;
   const booked = event.attendees?.length || 1;
 
   return {
@@ -340,7 +347,7 @@ export function toTourSchedule(event: GoogleCalendarParsedEvent): TourSchedule {
       standard: { price: 150, totalSeats: 8, bookedSeats: booked },
       group: { price: 120, totalSeats: 0, bookedSeats: 0 },
     },
-    notes: event.description || `Imported from Google Calendar on ${new Date().toISOString().split('T')[0]}`,
+    notes: event.description || `Imported from Google Calendar on ${eritreaDateString()}`,
   };
 }
 
@@ -358,24 +365,11 @@ export function googleCalendarMonth(link: string) {
   if (year < 1970 || month < 1 || month > 12 || date.getUTCDate() !== day || day === 0) {
     throw new Error('The calendar link contains an invalid date.');
   }
-  const timeZone = url.searchParams.get('ctz') || 'Africa/Nairobi';
-  const dayInZone = new Intl.DateTimeFormat('en-CA', {
-    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-  });
-  // Find the first instant of the local date, including months with DST changes.
-  const startOfMonth = (utcMidnight: number) => {
-    const target = new Date(utcMidnight).toISOString().slice(0, 10);
-    let low = utcMidnight / 1000 - 86400, high = utcMidnight / 1000 + 86400;
-    while (low < high) {
-      const mid = Math.floor((low + high) / 2);
-      const parts = Object.fromEntries(dayInZone.formatToParts(mid * 1000).map(p => [p.type, p.value]));
-      if (`${parts.year}-${parts.month}-${parts.day}` < target) low = mid + 1;
-      else high = mid;
-    }
-    return new Date(low * 1000).toISOString();
+  const startOfMonth = (monthIndex: number) => {
+    const civil = new Date(Date.UTC(year, monthIndex, 1)).toISOString().slice(0, 10);
+    return calendarInstant(civil + 'T00:00:00').toISOString();
   };
-  return { timeZone, timeMin: startOfMonth(Date.UTC(year, month - 1, 1)),
-    timeMax: startOfMonth(Date.UTC(year, month, 1)),
+  return { timeZone: ERITREA_TIME_ZONE, timeMin: startOfMonth(month - 1), timeMax: startOfMonth(month),
     label: new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date) };
 }
 

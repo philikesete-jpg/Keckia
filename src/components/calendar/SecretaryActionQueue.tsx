@@ -8,7 +8,7 @@ import {
   Flame,
   Check,
 } from 'lucide-react';
-import { FeedTask, FeedConversation, FeedConflict, FeedEvent, FeedTraveler } from '../../../shared/feedSchema';
+import { FeedTask, FeedConversation, FeedConflict, FeedEvent, FeedTraveler, eritreaDateString, parseFeedDate, formatEritreaDateTime } from '../../../shared/feedSchema';
 
 interface SecretaryActionQueueProps {
   tasks?: FeedTask[];
@@ -184,7 +184,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
 
   // Filter tasks based on active pill
   const filteredTasks = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = eritreaDateString();
     return combinedTasks.filter((t) => {
       if (activeFilter === 'completed') return t.status === 'completed';
       if (t.status === 'completed') return false;
@@ -192,7 +192,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
       if (activeFilter === 'urgent') return t.priority === 'urgent' || t.priority === 'high';
       if (activeFilter === 'snoozed') return t.status === 'snoozed';
       if (activeFilter === 'today') {
-        const taskDueStr = t.due ? t.due.split('T')[0] : '';
+        const taskDueStr = t.due ? parseFeedDate(t.due).dateString : '';
         return taskDueStr <= todayStr;
       }
       return true;
@@ -321,7 +321,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
                       </span>
                       {isSnoozed && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          Snoozed until {task.snoozedUntil ? new Date(task.snoozedUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Later'}
+                          Snoozed until {task.snoozedUntil ? formatEritreaDateTime(task.snoozedUntil) : 'Later'}
                         </span>
                       )}
                       <h4 className="font-semibold text-slate-900 line-clamp-1">{task.title}</h4>
@@ -337,7 +337,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
                       {task.due && (
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-slate-400" />
-                          Due: {new Date(task.due).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          Due: {formatEritreaDateTime(task.due)}
                         </span>
                       )}
                       {task.assignedTo && (

@@ -119,7 +119,7 @@ async function ensureSeedUsers() {
       fullName: u.fullName,
       role: u.role,
       passwordHash: hashPassword(u.password),
-      mustChangePassword: 0,
+      mustChangePassword: 1,
       active: 1,
     }).onConflictDoNothing();
   }
@@ -184,18 +184,6 @@ async function sessionUser(req: ApiRequest): Promise<SessionUser | null> {
         return publicUser(row.users);
       }
     }
-  }
-  if (token === "signed_out") {
-    return null;
-  }
-  // Automatically resolve the primary CEO Administrator session so the workspace opens ready out-of-the-box
-  const [ceoRow] = await db
-    .select()
-    .from(users)
-    .where(and(eq(users.role, "CEO"), eq(users.active, 1)))
-    .limit(1);
-  if (ceoRow) {
-    return publicUser(ceoRow);
   }
   return null;
 }
@@ -3588,12 +3576,17 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
         return fail(401, "Invalid username or password.");
       }
 
+      // An account still on one of the published starter passwords must pick a
+      // new one before it can do anything else.
+      const onStarterPassword = DEFAULT_SEED_PASSWORDS.has(password);
       await db
         .update(users)
         .set({
           lastLoginAt: new Date(),
+          ...(onStarterPassword ? { mustChangePassword: 1 } : {}),
         })
         .where(eq(users.id, user.id));
+      if (onStarterPassword) user = { ...user, mustChangePassword: 1 };
 
       const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000);
@@ -3671,6 +3664,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
       const current = String(req.body?.currentPassword ?? "");
       const next = String(req.body?.newPassword ?? "");
       if (next.length < 8) return fail(400, "The new password must be at least 8 characters.");
+      if (DEFAULT_SEED_PASSWORDS.has(next)) return fail(400, "Choose a password other than the published starter passwords.");
 
       const db = await getDb();
       const [row] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
@@ -3705,6 +3699,7 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
   /* ---------- everything below requires a session ---------- */
   const user = await sessionUser(req);
   if (!user) return fail(401, "Sign in required.");
+  if (user.mustChangePassword) return fail(403, "Change your password before continuing.");
 
   /* ---------------- AI drafting & Passport OCR (session + role required) ---------------- */
   if (head === "ai") {

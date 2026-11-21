@@ -109,13 +109,6 @@ const ChangePasswordView: React.FC<{ user: WorkspaceUser; onDone: () => void }> 
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save and continue
             </button>
-            <button
-              type="button"
-              onClick={onDone}
-              className="w-full rounded-xl border border-slate-200 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 cursor-pointer"
-            >
-              Keep current password & continue
-            </button>
           </div>
         </form>
       </div>
@@ -225,9 +218,12 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
         setPhase('anonymous');
         return;
       }
-      const readyUser = { ...signedIn, mustChangePassword: false };
-      setUser(readyUser);
-      await loadWorkspace(readyUser);
+      setUser(signedIn);
+      if (signedIn.mustChangePassword) {
+        setPhase('password');
+        return;
+      }
+      await loadWorkspace(signedIn);
     },
     [loadWorkspace],
   );

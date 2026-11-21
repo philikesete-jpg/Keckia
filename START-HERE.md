@@ -62,11 +62,6 @@ editing, the administrator-only guard on editing and deleting, system settings,
 importing, backing up, clearing, restoring, the public website feed, and the
 audit trail.
 
-## Starting passwords
+## First staff sign-in
 
-Created once, on first use. Every one of them must be changed at first sign-in.
-The full list is in `README.md`; the administrator account is `admin` /
-`Admin@2026!`.
-
-`README.md` has the rest: who can do what, the Admin Control Centre, how the
-website feed works, and troubleshooting.
+Follow **First staff sign-in** in `README.md` to activate the owner account and issue individual credentials.

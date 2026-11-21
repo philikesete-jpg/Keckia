@@ -6,7 +6,7 @@ import { handleApi, type ApiRequest } from "./server/api.ts";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "50mb", verify(req, _res, buf) { if (req.url?.startsWith("/api/whatsapp/webhook")) (req as any).rawBody = buf.toString("utf8"); } }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Route all /api requests to handleApi
@@ -26,6 +26,7 @@ app.use("/api", async (req, res) => {
     path: pathPart,
     query: Object.fromEntries(url.searchParams.entries()),
     body: req.body,
+    rawBody: (req as any).rawBody,
     cookies,
     headers: req.headers,
   };

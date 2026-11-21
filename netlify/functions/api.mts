@@ -28,6 +28,7 @@ export default async (req: Request, context: Context) => {
     query: Object.fromEntries(url.searchParams.entries()),
     body,
     cookies,
+    headers: Object.fromEntries(req.headers.entries()),
   };
 
   let result;

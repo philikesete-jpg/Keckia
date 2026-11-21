@@ -363,20 +363,6 @@ export const UnifiedInboxView: React.FC<UnifiedInboxViewProps> = ({
             <span>Simulate Inbound WA</span>
           </button>
 
-          {userIsAdmin && (
-            <button
-              onClick={() => {
-                setFocusOmnichannelConv(null);
-                setIsOmnichannelModalOpen(true);
-              }}
-              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-              title="AI Categorize, Assign & Insert all clients from Email, Google Calendar, and WhatsApp"
-            >
-              <Bot className="w-3.5 h-3.5 text-slate-600" />
-              <span>AI Import Clients</span>
-            </button>
-          )}
-
           {userIsAdmin && onOpenAutomationPipeline && (
             <button
               type="button"
@@ -525,19 +511,6 @@ export const UnifiedInboxView: React.FC<UnifiedInboxViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {userIsAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFocusOmnichannelConv(convertFeedConvToStandard(activeConversation));
-                      setIsOmnichannelModalOpen(true);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>AI Import This Client</span>
-                  </button>
-                )}
                 {activeConversation.channel === 'whatsapp' && (
                   <a
                     href={`https://wa.me/${getRecipientPhone(activeConversation).replace(/[^\d]/g, '')}`}
@@ -875,31 +848,6 @@ export const UnifiedInboxView: React.FC<UnifiedInboxViewProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {userIsAdmin && (
-        <OmnichannelClientImportModal
-          isOpen={isOmnichannelModalOpen}
-          onClose={() => {
-            setIsOmnichannelModalOpen(false);
-            setFocusOmnichannelConv(null);
-          }}
-          isAdmin={userIsAdmin}
-          conversations={localConversations.map(convertFeedConvToStandard)}
-          calendarEvents={calendarEvents}
-          employees={employees}
-          packages={packages}
-          focusConversation={focusOmnichannelConv}
-          onBatchInsertClients={(clients) => {
-            if (onBatchInsertOmnichannelClients) {
-              onBatchInsertOmnichannelClients(clients);
-              setReplySuccessNotice(
-                `Auto-categorized, assigned staff, and inserted ${clients.length} client(s) into CRM, Tourist Dossiers & Ticketing Directory.`
-              );
-              setTimeout(() => setReplySuccessNotice(null), 5000);
-            }
-          }}
-        />
       )}
     </div>
   );

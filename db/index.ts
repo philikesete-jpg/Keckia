@@ -372,6 +372,9 @@ export async function getDb(): Promise<Database> {
       }
 
       // 3. Fallback to in-memory PGlite ONLY when NO persistent connection was configured
+      if (process.env.NETLIFY === "true" || process.env.NODE_ENV === "production") {
+        throw new DatabaseUnavailableError(MISSING_CONNECTION_MESSAGE);
+      }
       const client = await getPGliteClient();
       try {
         if (pgliteInstance && typeof (pgliteInstance as any).query === "function") {

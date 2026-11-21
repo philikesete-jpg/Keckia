@@ -42,6 +42,7 @@ interface TourCalendarViewProps {
   onAddSchedule?: (schedule: TourSchedule) => void;
   onUpdateScheduleGuide: (scheduleId: string, guideId: string, guideName: string) => void;
   onSavePackageItinerary: (packageId: string, itinerary: ItineraryItem[]) => void;
+  onOpenGoogleCalendarImport?: () => void;
 }
 
 export const TourCalendarView: React.FC<TourCalendarViewProps> = ({
@@ -52,6 +53,7 @@ export const TourCalendarView: React.FC<TourCalendarViewProps> = ({
   onAddSchedule,
   onUpdateScheduleGuide,
   onSavePackageItinerary,
+  onOpenGoogleCalendarImport,
 }) => {
   // Current calendar view date state (Default to August 2026 or current active schedule)
   const initialDate = useMemo(() => {
@@ -253,6 +255,16 @@ export const TourCalendarView: React.FC<TourCalendarViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {onOpenGoogleCalendarImport && (
+            <button
+              onClick={onOpenGoogleCalendarImport}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs"
+              title="Import schedules and departures from Google Calendar"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Import Google Calendar</span>
+            </button>
+          )}
           <button
             onClick={handleExportCSV}
             className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-2xs"

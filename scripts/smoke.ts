@@ -8,6 +8,13 @@
  *
  *   NETLIFY_DB_DRIVER=server NETLIFY_DB_URL=postgres://… npx tsx scripts/smoke.ts
  */
+// If environment database is readonly, isolate with temporary database for smoke testing
+if (process.env.NETLIFY_DB_URL && process.env.NETLIFY_DB_URL.includes("readonly")) {
+  for (const key of Object.keys(process.env)) {
+    if (/^(SQL_|NETLIFY_DB|NETLIFY_DATABASE|DATABASE_URL$|NEON_DATABASE_URL$|POSTGRES_URL)/.test(key)) delete process.env[key];
+  }
+}
+
 import { handleApi, SESSION_COOKIE, type ApiRequest } from "../server/api.ts";
 
 let passed = 0;

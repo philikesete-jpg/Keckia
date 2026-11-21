@@ -57,6 +57,7 @@ interface CalendarWorkspaceProps {
   onOpenTravelerDossier?: (travelerId: string, travelerName?: string) => void;
   onOpenFeedImport?: () => void;
   onOpenDataSync?: () => void;
+  onOpenGoogleCalendarImport?: () => void;
   lastSuccessfulFeedTime?: string;
   isAdminUser?: boolean;
 }
@@ -76,6 +77,7 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
   onOpenTravelerDossier,
   onOpenFeedImport,
   onOpenDataSync,
+  onOpenGoogleCalendarImport,
   lastSuccessfulFeedTime,
   isAdminUser = false,
 }) => {
@@ -618,6 +620,16 @@ export const CalendarWorkspace: React.FC<CalendarWorkspaceProps> = ({
             </div>
             Category Mappings
           </button>
+
+          {onOpenGoogleCalendarImport && (
+            <button
+              onClick={onOpenGoogleCalendarImport}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Import Google Calendar events (.ics, API, or JSON)"
+            >
+              <CalendarIcon className="w-3.5 h-3.5" /> Import Google Calendar
+            </button>
+          )}
 
           {isAdminUser && onOpenFeedImport && (
             <button

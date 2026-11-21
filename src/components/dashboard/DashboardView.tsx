@@ -37,6 +37,7 @@ import { SecretaryActionQueue } from '../calendar/SecretaryActionQueue';
 import { TouristDestinationSlideshow } from './TouristDestinationSlideshow';
 import { DashboardPhoneBook } from './DashboardPhoneBook';
 import { DataSyncHubModal } from '../admin/DataSyncHubModal';
+import { GoogleCalendarImportModal } from '../calendar/GoogleCalendarImportModal';
 import { OmnichannelClientImportModal } from '../common/OmnichannelClientImportModal';
 import { OmnichannelExtractedClient } from '../../lib/omnichannelClientImport';
 
@@ -72,6 +73,7 @@ interface DashboardViewProps {
   onSaveVoADoc?: (doc: VisaOnArrivalDoc) => void;
   onSavePermitDoc?: (permit: RegionalPermitDoc) => void;
   onNotify?: (title: string, message: string, linkTab?: ActiveTab) => void;
+  onImportGoogleCalendar?: (feedEvents: FeedEvent[], schedules: TourSchedule[]) => void;
   isAdminUser?: boolean;
   setActiveTab?: (tab: ActiveTab) => void;
   onNavigate?: (tab: ActiveTab) => void;
@@ -111,6 +113,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSaveVoADoc,
   onSavePermitDoc,
   onNotify,
+  onImportGoogleCalendar,
   isAdminUser = false,
   setActiveTab,
   onNavigate,
@@ -119,6 +122,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     isAdminUser ? 'automation' : 'calendar'
   );
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isGoogleCalendarModalOpen, setIsGoogleCalendarModalOpen] = useState(false);
   const [isOmnichannelModalOpen, setIsOmnichannelModalOpen] = useState(false);
 
   const handleNavigate = (tab: ActiveTab) => {
@@ -255,11 +259,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setIsOmnichannelModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0"
+              onClick={() => setIsGoogleCalendarModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shrink-0 shadow-xs"
+              title="Import events from Google Calendar"
             >
-              <Bot className="w-4 h-4 text-amber-300" />
-              <span>AI Import Clients</span>
+              <CalendarDays className="w-4 h-4 text-white" />
+              <span>Import Google Calendar</span>
             </button>
           </div>
         )}
@@ -279,6 +284,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onOpenTravelerDossier={onOpenTravelerDossier}
             onOpenFeedImport={isAdminUser ? () => setActiveSection('feed') : undefined}
             onOpenDataSync={isAdminUser ? () => setIsSyncModalOpen(true) : undefined}
+            onOpenGoogleCalendarImport={() => setIsGoogleCalendarModalOpen(true)}
             lastSuccessfulFeedTime={isAdminUser ? lastSuccessfulFeedTime : undefined}
             isAdminUser={isAdminUser}
           />
@@ -374,40 +380,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         />
       )}
 
-      {/* MODAL: OMNICHANNEL AI CLIENT IMPORTER & STAFF ASSIGNER (ADMIN ONLY) */}
-      {isAdminUser && (
-        <OmnichannelClientImportModal
-          isOpen={isOmnichannelModalOpen}
-          onClose={() => setIsOmnichannelModalOpen(false)}
-          isAdmin={isAdminUser}
-          conversations={(feedConversations || []).map((fc) => ({
-            id: fc.id,
-            channel: fc.channel === 'whatsapp' ? 'WhatsApp' : 'Email',
-            clientName: fc.travelerName || 'Client',
-            clientHandle:
-              fc.channel === 'whatsapp'
-                ? (fc as any).phoneNumber || '+2917190374'
-                : `${(fc.travelerName || 'client').toLowerCase().replace(/[^a-z0-9]/g, '.')}@traveler.com`,
-            subject: fc.subject || 'Tour & Travel Inquiry',
-            status: fc.status === 'unanswered' ? 'Unanswered' : 'Waiting for Client',
-            lastMessagePreview: fc.messages[fc.messages.length - 1]?.content || '',
-            lastTimestamp: fc.lastMessageAt,
-            unreadCount: fc.status === 'unanswered' ? 1 : 0,
-            messages: (fc.messages || []).map((m) => ({
-              id: m.id,
-              sender: m.sender,
-              senderName: m.senderName,
-              text: m.content,
-              timestamp: m.timestamp,
-              channel: fc.channel === 'whatsapp' ? 'WhatsApp' : 'Email',
-            })),
-          }))}
-          calendarEvents={feedEvents}
-          employees={employees}
-          packages={packages}
-          onBatchInsertClients={onBatchInsertOmnichannelClients}
-        />
-      )}
+      {/* MODAL: GOOGLE CALENDAR IMPORTER */}
+      <GoogleCalendarImportModal
+        isOpen={isGoogleCalendarModalOpen}
+        onClose={() => setIsGoogleCalendarModalOpen(false)}
+        onImportCompleted={(importedFeedEvents, importedSchedules) => {
+          if (onImportGoogleCalendar) {
+            onImportGoogleCalendar(importedFeedEvents, importedSchedules);
+          }
+          if (onFeedIngested) {
+            onFeedIngested();
+          }
+        }}
+      />
     </div>
   );
 };

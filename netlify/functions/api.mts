@@ -10,9 +10,11 @@ export default async (req: Request, context: Context) => {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/api\/?/, "");
 
+  let rawBody: string | undefined;
   let body: unknown = undefined;
   if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
-    body = await req.json().catch(() => ({}));
+    rawBody = await req.text();
+    try { body = JSON.parse(rawBody); } catch { body = {}; }
   }
 
   const cookies: Record<string, string> = {};
@@ -27,7 +29,9 @@ export default async (req: Request, context: Context) => {
     path,
     query: Object.fromEntries(url.searchParams.entries()),
     body,
+    rawBody,
     cookies,
+    headers: Object.fromEntries(req.headers.entries()),
   };
 
   let result;
@@ -40,7 +44,7 @@ export default async (req: Request, context: Context) => {
     // through to the browser as 503 rather than swallowed as a generic 500.
     const unavailable = error?.name === "DatabaseUnavailableError";
     return Response.json(
-      { error: error?.message || "Unexpected server error.", database: unavailable ? false : undefined },
+      { error: unavailable ? "Database unavailable." : "Unexpected server error.", database: unavailable ? false : undefined },
       {
         status: unavailable ? 503 : 500,
         headers: path.startsWith("public") ? { "Access-Control-Allow-Origin": "*" } : undefined,

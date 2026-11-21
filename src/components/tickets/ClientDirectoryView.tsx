@@ -191,15 +191,6 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {userIsAdmin && (
-            <button
-              onClick={() => setIsOmnichannelModalOpen(true)}
-              className="px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
-            >
-              <Bot className="w-4 h-4 text-amber-300" /> AI Import &amp; Assign (Email · Calendar · WhatsApp)
-            </button>
-          )}
-
           <button
             onClick={() => setIsAbbyyScannerOpen(true)}
             className="px-4 py-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-red-600/20"
@@ -821,35 +812,6 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
           }
         }}
       />
-
-      {userIsAdmin && (
-        <OmnichannelClientImportModal
-          isOpen={isOmnichannelModalOpen}
-          onClose={() => setIsOmnichannelModalOpen(false)}
-          isAdmin={userIsAdmin}
-          conversations={conversations}
-          calendarEvents={calendarEvents}
-          employees={employees}
-          packages={packages}
-          targetFormLabel="Ticketing Client Form"
-          onInsertIntoForm={(client) => {
-            if (onOpenAddClientWithData) {
-              onOpenAddClientWithData(client);
-            } else if (onAddClient) {
-              const created = toTicketingClient(client);
-              onAddClient(created);
-              setSelectedClientId(created.id);
-            }
-          }}
-          onBatchInsertClients={(extractedClients) => {
-            if (onBatchInsertOmnichannelClients) {
-              onBatchInsertOmnichannelClients(extractedClients);
-            } else if (onAddClient) {
-              extractedClients.forEach((c) => onAddClient(toTicketingClient(c)));
-            }
-          }}
-        />
-      )}
     </div>
   );
 };

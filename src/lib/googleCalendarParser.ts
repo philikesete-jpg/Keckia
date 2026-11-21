@@ -343,3 +343,60 @@ export function toTourSchedule(event: GoogleCalendarParsedEvent): TourSchedule {
     notes: event.description || `Imported from Google Calendar on ${new Date().toISOString().split('T')[0]}`,
   };
 }
+
+/** The account index in a Google Calendar URL identifies a browser session.
+ * The API calendar ID is chosen independently in the importer. */
+export function googleCalendarMonth(link: string) {
+  const url = new URL(link);
+  const monthPath = /^\/calendar\/(?:u\/\d+\/)?r\/month\/(\d{4})\/(\d{1,2})\/(\d{1,2})\/?$/.exec(url.pathname);
+  if (url.origin !== 'https://calendar.google.com' || !monthPath) {
+    throw new Error('Paste a Google Calendar month-view link.');
+  }
+  const [, y, m, d] = monthPath;
+  const year = Number(y), month = Number(m), day = Number(d);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (year < 1970 || month < 1 || month > 12 || date.getUTCDate() !== day || day === 0) {
+    throw new Error('The calendar link contains an invalid date.');
+  }
+  const timeZone = url.searchParams.get('ctz') || 'Africa/Nairobi';
+  const dayInZone = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  // Find the first instant of the local date, including months with DST changes.
+  const startOfMonth = (utcMidnight: number) => {
+    const target = new Date(utcMidnight).toISOString().slice(0, 10);
+    let low = utcMidnight / 1000 - 86400, high = utcMidnight / 1000 + 86400;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      const parts = Object.fromEntries(dayInZone.formatToParts(mid * 1000).map(p => [p.type, p.value]));
+      if (`${parts.year}-${parts.month}-${parts.day}` < target) low = mid + 1;
+      else high = mid;
+    }
+    return new Date(low * 1000).toISOString();
+  };
+  return { timeZone, timeMin: startOfMonth(Date.UTC(year, month - 1, 1)),
+    timeMax: startOfMonth(Date.UTC(year, month, 1)),
+    label: new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date) };
+}
+
+export async function fetchGoogleCalendarMonth(token: string, calendarId: string, link: string) {
+  const { timeMin, timeMax, timeZone } = googleCalendarMonth(link);
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+  url.search = new URLSearchParams({ timeMin, timeMax, timeZone, singleEvents: 'true',
+    orderBy: 'startTime', maxResults: '250', showDeleted: 'false' }).toString();
+  const events: GoogleCalendarParsedEvent[] = [];
+  do {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Google authorization expired. Connect again.');
+      if (response.status === 403 || response.status === 404) throw new Error('Google could not read this calendar. Check the calendar ID and the account you selected, or upload a calendar export.');
+      throw new Error(`Google Calendar could not load this month (HTTP ${response.status}).`);
+    }
+    const page = await response.json();
+    events.push(...parseGoogleCalendarJson((page.items || []).filter((item: any) =>
+      item.id && item.status !== 'cancelled' && (item.start?.date || item.start?.dateTime))));
+    if (!page.nextPageToken) break;
+    url.searchParams.set('pageToken', page.nextPageToken);
+  } while (true);
+  return events;
+}

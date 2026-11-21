@@ -1712,8 +1712,8 @@ export default function App() {
 
     const notif: NotificationItem = {
       id: `notif-gcal-${Date.now()}`,
-      title: 'Google Calendar Synchronized',
-      message: `Imported ${importedFeedEvents.length} calendar events and ${importedSchedules.length} departures from Google Calendar with exact matching colors & times.`,
+      title: 'Google Calendar import',
+      message: `Added ${importedFeedEvents.length} calendar event(s)${importedSchedules.length ? ` and ${importedSchedules.length} departure(s)` : ''} to the workspace.`,
       timestamp: 'Just now',
       read: false,
       priority: 'normal',
@@ -2433,7 +2433,7 @@ export default function App() {
 
           {effectiveTab === 'accounts' && <StaffAccountsView currentUserId={user.id} />}
 
-          {effectiveTab === 'admin' && <AdminControlCentre />}
+          {effectiveTab === 'admin' && <AdminControlCentre onImportCalendar={() => setIsGoogleCalendarModalOpen(true)} />}
           </ErrorBoundary>
         </main>
       </div>

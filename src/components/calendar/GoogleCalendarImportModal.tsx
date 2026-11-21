@@ -21,13 +21,15 @@ import {
   GoogleCalendarParsedEvent,
   parseGoogleCalendarIcs,
   parseGoogleCalendarJson,
+  googleCalendarMonth,
+  fetchGoogleCalendarMonth,
   toFeedEvent,
   toTourSchedule,
   GOOGLE_CALENDAR_COLORS,
 } from '../../lib/googleCalendarParser';
 import { FeedEvent, TourSchedule } from '../../types';
-import { getCachedAccessToken, authorizeGoogleWorkspace } from '../../lib/firebase';
-import { fetchGoogleCalendarData } from '../../lib/dataSyncService';
+import { auth } from '../../lib/firebase';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 interface GoogleCalendarImportModalProps {
   isOpen: boolean;
@@ -54,7 +56,11 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
   // Input states
   const [targetAccount, setTargetAccount] = useState('philikesete@gmail.com');
   const [pastedText, setPastedText] = useState('');
-  const [dateRangeFilter, setDateRangeFilter] = useState<'30' | '60' | '90' | 'all'>('60');
+  const [monthLink, setMonthLink] = useState('https://calendar.google.com/calendar/u/0/r/month/2026/11/1?ctz=Africa/Nairobi');
+  const [includeDepartures, setIncludeDepartures] = useState(false);
+  const clearPreview = () => { setParsedEvents([]); setSelectedIds(new Set()); setStatusMessage(null); };
+  let month: ReturnType<typeof googleCalendarMonth> | undefined;
+  try { month = googleCalendarMonth(monthLink); } catch { /* Editable URLs can be incomplete. */ }
   const [searchFilter, setSearchFilter] = useState('');
 
   if (!isOpen) return null;
@@ -65,31 +71,14 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
     const account = targetAccount.trim() || 'philikesete@gmail.com';
     setStatusMessage({ type: 'info', text: `Connecting to Google Calendar (${account})...` });
     try {
-      let token = getCachedAccessToken();
-      if (!token) {
-        token = await authorizeGoogleWorkspace(false, account);
-      }
-
-      setStatusMessage({ type: 'info', text: `Retrieving exact calendar events and schedules from ${account}...` });
-      const rawEvents = await fetchGoogleCalendarData(token, account);
-
-      const events: GoogleCalendarParsedEvent[] = rawEvents.map((item) => {
-        return {
-          id: item.id,
-          uid: item.id,
-          summary: item.summary,
-          description: item.description || '',
-          location: item.location || 'Asmara, Eritrea',
-          start: item.start,
-          end: item.end,
-          allDay: !item.start.includes('T'),
-          colorHex: item.colorHex || '#039be5',
-          category: item.categoryKey || 'tour',
-          status: 'confirmed',
-          attendees: item.attendees,
-        };
-      });
-
+      clearPreview();
+      const provider = new GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar.events.readonly');
+      provider.setCustomParameters({ login_hint: account, prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
+      const token = GoogleAuthProvider.credentialFromResult(result)?.accessToken;
+      if (!token) throw new Error('Google did not grant calendar access. Reconnect or upload an export.');
+      const events = await fetchGoogleCalendarMonth(token, account, monthLink);
       setParsedEvents(events);
       setSelectedIds(new Set(events.map((e) => e.id)));
       setStatusMessage({
@@ -100,7 +89,10 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
       console.warn('Google Calendar fetch issue:', err);
       setStatusMessage({
         type: 'error',
-        text: err?.message || `Could not fetch directly from Google Calendar (${account}). You can also import via .ics export file.`,
+        text: err?.code === 'auth/unauthorized-domain'
+          ? 'This site is not yet authorized for Google sign-in in Firebase. Use Upload File to import a Google Calendar export.'
+          : err?.code === 'auth/popup-closed-by-user' ? 'Google sign-in was closed. You can try again when ready.'
+          : err?.message || 'Could not read this calendar. You can also upload a Google Calendar export.',
       });
     } finally {
       setIsFetching(false);
@@ -205,8 +197,19 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
 
     setIsImporting(true);
     try {
-      const feedEvents: FeedEvent[] = selected.map(toFeedEvent);
-      const schedules: TourSchedule[] = selected.map(toTourSchedule);
+      const feedEvents: FeedEvent[] = selected.map(event => {
+        const row = toFeedEvent(event);
+        if (activeTab !== 'sync' || targetAccount.trim().toLowerCase() === 'philikesete@gmail.com') return row;
+        const source = targetAccount.trim().toLowerCase();
+        return { ...row, id: `gcal_${encodeURIComponent(source)}_${event.id}`,
+          calendarId: source, calendarName: `Google Calendar (${source})` };
+      });
+      const schedules: TourSchedule[] = activeTab === 'sync' && !includeDepartures ? [] :
+        selected.map((event, i) => {
+          const schedule = toTourSchedule(event);
+          return activeTab === 'sync' && targetAccount.trim().toLowerCase() !== 'philikesete@gmail.com'
+            ? { ...schedule, id: 'sch_' + feedEvents[i].id } : schedule;
+        });
 
       if (onImportCompleted) {
         onImportCompleted(feedEvents, schedules);
@@ -214,7 +217,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
 
       setStatusMessage({
         type: 'success',
-        text: `Successfully imported ${selected.length} events to Operations Calendar and Tour Schedules!`,
+        text: `Added ${selected.length} event(s) to Operations Calendar${schedules.length ? " and Tour Schedules" : ""}.`,
       });
 
       setTimeout(() => {
@@ -264,6 +267,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close calendar import"
             className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -273,7 +277,8 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
         {/* Source Selector Tabs */}
         <div className="flex border-b border-slate-200 bg-slate-100/70 px-6 pt-2">
           <button
-            onClick={() => setActiveTab('sync')}
+            disabled={isFetching || isImporting}
+            onClick={() => { if (activeTab !== 'sync') clearPreview(); setActiveTab('sync'); }}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
               activeTab === 'sync'
                 ? 'border-emerald-600 text-emerald-800 bg-white rounded-t-lg'
@@ -284,7 +289,8 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
             Direct Google Sync
           </button>
           <button
-            onClick={() => setActiveTab('file')}
+            disabled={isFetching || isImporting}
+            onClick={() => { if (activeTab !== 'file') clearPreview(); setActiveTab('file'); }}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
               activeTab === 'file'
                 ? 'border-emerald-600 text-emerald-800 bg-white rounded-t-lg'
@@ -295,7 +301,8 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
             Upload Google .ics File
           </button>
           <button
-            onClick={() => setActiveTab('paste')}
+            disabled={isFetching || isImporting}
+            onClick={() => { if (activeTab !== 'paste') clearPreview(); setActiveTab('paste'); }}
             className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
               activeTab === 'paste'
                 ? 'border-emerald-600 text-emerald-800 bg-white rounded-t-lg'
@@ -334,67 +341,27 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
           {/* TAB 1: Direct Google Sync */}
           {activeTab === 'sync' && (
             <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <span>Google Calendar Account Integration</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
-                      {targetAccount}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-600">
-                    Connects directly to Google Calendar v3 API to fetch tour dates, departures, and arrivals from{' '}
-                    <strong className="text-slate-900 font-mono">philikesete@gmail.com</strong>.
-                  </p>
-                  <div className="pt-1.5 flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-slate-500">Target Google Account:</span>
-                    <input
-                      type="email"
-                      value={targetAccount}
-                      onChange={(e) => setTargetAccount(e.target.value)}
-                      placeholder="philikesete@gmail.com"
-                      className="px-2.5 py-1 text-xs font-mono rounded-lg border border-slate-200 bg-white text-slate-800 outline-none focus:border-emerald-500 w-56"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFetchFromGoogle}
-                  disabled={isFetching}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-xs shrink-0 self-start sm:self-auto"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-                  {isFetching ? 'Fetching from Google...' : `Fetch from ${targetAccount}`}
-                </button>
-              </div>
-
-              {/* Exact Matching Guarantee Badges */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
-                <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
-                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#039be5]" /> Exact Event Times
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    Extracts start &amp; end dates, times, and handles all-day operational dates.
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
-                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#8e24aa]" /> Exact Color Palette
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    Retains Google Calendar color IDs (Peacock, Grape, Banana, Tangerine, Sage).
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1">
-                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#f4511e]" /> Dual Destination
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    Inserts into both Operations Calendar and Tour Departures with zero duplication.
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-sm font-bold">Import a month from Google Calendar</h3>
+              <label className="block text-xs font-semibold">Google Calendar month link
+                <input type="url" value={monthLink} disabled={isFetching}
+                  onChange={e => { setMonthLink(e.target.value); clearPreview(); }}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" />
+              </label>
+              {month ? <p className="text-sm text-slate-700">{month.label} · {month.timeZone} ·{' '}
+                <a className="text-emerald-700 underline" href={monthLink} target="_blank" rel="noreferrer">Open in Google Calendar</a>
+              </p> : <p className="text-xs text-rose-700">Enter a valid Google Calendar month-view link and time zone.</p>}
+              <label className="block text-xs font-semibold">Source calendar email or ID
+                <input type="text" value={targetAccount} disabled={isFetching}
+                  onChange={e => { setTargetAccount(e.target.value); clearPreview(); }}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" />
+              </label>
+              <p className="text-xs text-slate-600">Sign in with a Google account that can read this calendar. Review the events before adding them to the dashboard.</p>
+              <button type="button" onClick={handleFetchFromGoogle} disabled={!month || !targetAccount.trim() || isFetching}
+                className="rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">
+                {isFetching ? 'Loading events…' : 'Preview Google Calendar events'}
+              </button>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={includeDepartures}
+                onChange={e => setIncludeDepartures(e.target.checked)} /> Also add the selected events to Tour Schedules</label>
             </div>
           )}
 
@@ -564,7 +531,7 @@ export const GoogleCalendarImportModal: React.FC<GoogleCalendarImportModalProps>
           <button
             type="button"
             onClick={handleCommitImport}
-            disabled={selectedIds.size === 0 || isImporting}
+            disabled={selectedIds.size === 0 || isImporting || isFetching}
             className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-xs"
           >
             {isImporting ? (

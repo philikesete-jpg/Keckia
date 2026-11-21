@@ -410,16 +410,6 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setIsOmnichannelModalOpen(true)}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
-              >
-                <Bot className="w-4 h-4" />
-                Import & Auto-Fill from Email / Calendar / WhatsApp
-              </button>
-            )}
             <button
               onClick={onClose}
               className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition cursor-pointer border border-slate-200"
@@ -454,15 +444,6 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setIsOmnichannelModalOpen(true)}
-                    className="text-xs text-white font-bold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Bot className="w-3 h-3" /> Import from Email / Calendar / WhatsApp
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setIsAbbyyModalOpen(true)}
@@ -991,21 +972,6 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
         }}
         title="ABBYY® FineReader Engine — Tourist Profile Scanner"
       />
-
-      {isAdmin && (
-        <OmnichannelClientImportModal
-          isOpen={isOmnichannelModalOpen}
-          onClose={() => setIsOmnichannelModalOpen(false)}
-          isAdmin={isAdmin}
-          conversations={conversations}
-          calendarEvents={calendarEvents}
-          employees={employees}
-          packages={packages}
-          targetFormLabel="Tourist Registration Form"
-          onInsertIntoForm={(client) => applyOmnichannelClientToForm(client)}
-          onBatchInsertClients={onBatchInsertOmnichannelClients}
-        />
-      )}
     </div>
   );
 };

@@ -506,16 +506,6 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
             </button>
           </div>
 
-          {userIsAdmin && (
-            <button
-              type="button"
-              onClick={() => setIsOmnichannelModalOpen(true)}
-              className="px-4 py-2 rounded-full bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-            >
-              <Bot className="w-3.5 h-3.5 text-amber-300" /> AI Import &amp; Assign (Email · Calendar · WhatsApp)
-            </button>
-          )}
-
           <button
             type="button"
             onClick={openNewLeadModal}
@@ -1313,27 +1303,6 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
             </form>
           </div>
         </div>
-      )}
-
-      {userIsAdmin && (
-        <OmnichannelClientImportModal
-          isOpen={isOmnichannelModalOpen}
-          onClose={() => setIsOmnichannelModalOpen(false)}
-          isAdmin={userIsAdmin}
-          conversations={conversations}
-          calendarEvents={calendarEvents}
-          employees={employees}
-          packages={packages}
-          targetFormLabel="CRM Sales Lead Form"
-          onInsertIntoForm={(client) => applyOmnichannelClientToLeadForm(client)}
-          onBatchInsertClients={(clients) => {
-            if (onBatchInsertOmnichannelClients) {
-              onBatchInsertOmnichannelClients(clients);
-            } else if (onAddEnquiry) {
-              clients.forEach((c) => onAddEnquiry(toWebsiteEnquiry(c)));
-            }
-          }}
-        />
       )}
     </div>
   );

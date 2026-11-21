@@ -29,6 +29,7 @@ export const SCOPES = [
 ];
 
 export const AGENCY_EMAIL = "tours@eritreavisit.com";
+export const CALENDAR_EMAIL = "philikesete@gmail.com";
 export const FIRESTORE_DATABASE_ID = firebaseConfig.firestoreDatabaseId;
 
 export enum OperationType {
@@ -291,7 +292,7 @@ export async function syncAutomationPlanToFirestore(plan: {
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
   prompt: "select_account",
-  login_hint: AGENCY_EMAIL,
+  login_hint: CALENDAR_EMAIL,
 });
 SCOPES.forEach((scope) => googleProvider.addScope(scope));
 
@@ -315,7 +316,7 @@ export function setCachedAccessToken(token: string | null): void {
 
 export async function authorizeGoogleWorkspace(
   forceConsent = false,
-  loginHint: string = AGENCY_EMAIL
+  loginHint: string = CALENDAR_EMAIL
 ): Promise<string> {
   if (inMemoryAccessToken && !forceConsent) {
     return inMemoryAccessToken;

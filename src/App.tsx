@@ -62,6 +62,7 @@ import { TicketManagementView } from './components/tickets/TicketManagementView'
 import { TourPackagesView } from './components/packages/TourPackagesView';
 import { TransportManagementView } from './components/transport/TransportManagementView';
 import { HotelManagementView } from './components/hotels/HotelManagementView';
+import { AccountMessagesView } from './components/messages/AccountMessagesView';
 import { MessagesView } from './components/messages/MessagesView';
 import { FinanceWorkspace } from './components/finance/FinanceWorkspace';
 import { AuditControlView, detectRedFlags } from './components/audit/AuditControlView';
@@ -77,6 +78,7 @@ import { IssueTicketModal } from './components/tickets/IssueTicketModal';
 import { HotelReservationModal } from './components/hotels/HotelReservationModal';
 import { AddTouristActivityModal } from './components/tourists/AddTouristActivityModal';
 import { SampleDataModal } from './components/settings/SampleDataModal';
+import { GoogleCalendarImportModal } from './components/calendar/GoogleCalendarImportModal';
 import {
   OmnichannelExtractedClient,
   toBookingFromOmnichannelClient,
@@ -150,13 +152,14 @@ export default function App() {
   const [persistedClients, setPersistedClients] = useCollection<TicketingClient>('ticketingClients');
 
   // Daily Review & Calendar Feed collections (authoritative in Cloud SQL)
-  const [feedEvents] = useCollection<FeedEvent>('feedEvents');
+  const [feedEvents, setFeedEvents] = useCollection<FeedEvent>('feedEvents');
   const [feedTravelers] = useCollection<FeedTraveler>('feedTravelers');
   const [feedConversations] = useCollection<FeedConversation>('feedConversations');
   const [feedDrafts] = useCollection<FeedDraft>('feedDrafts');
   const [feedConflicts] = useCollection<FeedConflict>('feedConflicts');
   const [feedTasks] = useCollection<any>('feedTasks');
   const [dailyFeeds] = useCollection<any>('dailyFeeds');
+  const [isGoogleCalendarModalOpen, setIsGoogleCalendarModalOpen] = useState(false);
 
   const lastSuccessfulFeedTime = useMemo(() => {
     if (dailyFeeds && dailyFeeds.length > 0) {
@@ -1673,7 +1676,7 @@ export default function App() {
 
     const alert: NotificationItem = {
       id: `notif-omni-${Date.now()}`,
-      title: `Omnichannel AI Import & Assignment Completed`,
+      title: `Client Import & Assignment Completed`,
       message: `Categorized, assigned (Agent/Guide/Driver), and inserted ${extractedClients.length} client(s) from Email, Google Calendar & WhatsApp.`,
       timestamp: 'Just now',
       read: false,
@@ -1681,6 +1684,42 @@ export default function App() {
       type: 'client_alert',
     };
     setNotifications((prev) => [alert, ...prev]);
+  };
+
+  /**
+   * Import Google Calendar events into both feedEvents and tour schedules
+   */
+  const handleImportGoogleCalendarEvents = (importedFeedEvents: FeedEvent[], importedSchedules: TourSchedule[]) => {
+    if (importedFeedEvents.length > 0) {
+      setFeedEvents((prev) => {
+        const map = new Map((prev || []).map((e) => [e.id, e]));
+        importedFeedEvents.forEach((item) => {
+          map.set(item.id, item);
+        });
+        return Array.from(map.values());
+      });
+    }
+
+    if (importedSchedules.length > 0) {
+      setSchedules((prev) => {
+        const map = new Map((prev || []).map((s) => [s.id, s]));
+        importedSchedules.forEach((item) => {
+          map.set(item.id, item);
+        });
+        return Array.from(map.values());
+      });
+    }
+
+    const notif: NotificationItem = {
+      id: `notif-gcal-${Date.now()}`,
+      title: 'Google Calendar Synchronized',
+      message: `Imported ${importedFeedEvents.length} calendar events and ${importedSchedules.length} departures from Google Calendar with exact matching colors & times.`,
+      timestamp: 'Just now',
+      read: false,
+      priority: 'normal',
+      type: 'client_alert',
+    };
+    setNotifications((prev) => [notif, ...prev]);
   };
 
   /**
@@ -2134,6 +2173,7 @@ export default function App() {
               isAdminUser={role === 'CEO' || canView(role, 'admin')}
               onNavigate={(tab) => setActiveTab(tab)}
               onSelectSchedule={() => setActiveTab('tours')}
+              onImportGoogleCalendar={handleImportGoogleCalendarEvents}
               onBatchInsertOmnichannelClients={handleBatchInsertOmnichannelClients}
               onSaveTourist={handleUpsertAutomationTourist}
               onAddReservation={handleAddHotelReservation}
@@ -2256,6 +2296,7 @@ export default function App() {
               onAddSchedule={handleAddSchedule}
               onUpdateScheduleGuide={handleUpdateScheduleGuide}
               onSavePackageItinerary={handleSavePackageItinerary}
+              onOpenGoogleCalendarImport={() => setIsGoogleCalendarModalOpen(true)}
             />
           )}
 
@@ -2338,7 +2379,7 @@ export default function App() {
           )}
 
           {effectiveTab === 'messages' && (
-            <MessagesView
+            <AccountMessagesView currentUserId={user.id} tickets={tickets} dispatch={<MessagesView
               channels={channels}
               messages={messages}
               hotelLetters={hotelLetters}
@@ -2350,7 +2391,7 @@ export default function App() {
                 const targetHotel = hotels.find((h) => h.id === hotelId);
                 setActiveTab('hotels');
               }}
-            />
+            />} />
           )}
 
           {effectiveTab === 'finance' && (
@@ -2506,6 +2547,13 @@ export default function App() {
           onSave={handleSaveTouristActivity}
         />
       )}
+
+      {/* Google Calendar Import Modal */}
+      <GoogleCalendarImportModal
+        isOpen={isGoogleCalendarModalOpen}
+        onClose={() => setIsGoogleCalendarModalOpen(false)}
+        onImportCompleted={handleImportGoogleCalendarEvents}
+      />
     </div>
   );
 }

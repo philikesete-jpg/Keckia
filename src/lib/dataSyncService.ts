@@ -91,22 +91,33 @@ function categorizeCalendarEvent(summary: string, description: string = ''): { c
 }
 
 /**
- * Fetch Google Calendar events for tours@eritreavisit.com
+ * Fetch Google Calendar events for philikesete@gmail.com
  */
-export async function fetchGoogleCalendarData(token?: string): Promise<CalendarFetchItem[]> {
-  const effectiveToken = token || getCachedAccessToken() || (await authorizeGoogleWorkspace());
+export async function fetchGoogleCalendarData(token?: string, calendarId: string = 'philikesete@gmail.com'): Promise<CalendarFetchItem[]> {
+  const effectiveToken = token || getCachedAccessToken() || (await authorizeGoogleWorkspace(false, 'philikesete@gmail.com'));
   const now = new Date();
   const timeMin = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
 
-  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(
-    timeMin
-  )}&singleEvents=true&orderBy=startTime&maxResults=100`;
+  let url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+    calendarId
+  )}/events?timeMin=${encodeURIComponent(timeMin)}&singleEvents=true&orderBy=startTime&maxResults=100`;
 
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${effectiveToken}`,
     },
   });
+
+  if (!res.ok && res.status === 404 && calendarId !== 'primary') {
+    url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(
+      timeMin
+    )}&singleEvents=true&orderBy=startTime&maxResults=100`;
+    res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${effectiveToken}`,
+      },
+    });
+  }
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -495,8 +506,8 @@ export function buildUnifiedFeedSchema(
 
     return {
       id: `evt_gcal_${ce.id || index}`,
-      calendarId: 'google_calendar_eritreavisit',
-      calendarName: 'Google Calendar (tours@eritreavisit.com)',
+      calendarId: 'google_calendar_philikesete',
+      calendarName: 'Google Calendar (philikesete@gmail.com)',
       source: 'google-calendar' as const,
       sourceId: ce.id,
       title: ce.summary,
@@ -640,7 +651,7 @@ export function buildUnifiedFeedSchema(
     sources: [
       {
         id: 'src_gcal',
-        name: 'Google Calendar (tours@eritreavisit.com)',
+        name: 'Google Calendar (philikesete@gmail.com)',
         type: 'google_calendar',
         status: 'ok',
         checkedAt: generatedAt,

@@ -57,7 +57,7 @@ export const DataSyncHubModal: React.FC<DataSyncHubModalProps> = ({
         token = await authorizeGoogleWorkspace();
       }
 
-      setCurrentStep('Fetching Google Calendar events for tours@eritreavisit.com...');
+      setCurrentStep('Fetching Google Calendar events for philikesete@gmail.com...');
       await new Promise((r) => setTimeout(r, 400));
 
       setCurrentStep('Fetching Gmail inquiries strictly for tours@eritreavisit.com...');
@@ -124,7 +124,7 @@ export const DataSyncHubModal: React.FC<DataSyncHubModalProps> = ({
                 </span>
               </div>
               <h3 className="mt-3 text-sm font-bold text-slate-900">Google Calendar</h3>
-              <p className="text-xs font-mono text-slate-600 truncate mt-0.5">tours@eritreavisit.com</p>
+              <p className="text-xs font-mono text-slate-600 truncate mt-0.5">philikesete@gmail.com</p>
               <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
                 Imports departures, arrivals, tour dates, and bookings into the Operations Timeline.
               </p>

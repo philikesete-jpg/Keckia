@@ -183,15 +183,6 @@ export const TouristDirectoryView: React.FC<TouristDirectoryViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {isAdmin && (
-            <button
-              onClick={() => setIsOmnichannelModalOpen(true)}
-              className="px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Import clients from Email, Google Calendar & WhatsApp conversations, categorize & assign automatically"
-            >
-              <Bot className="w-4 h-4 text-amber-300" /> AI Import &amp; Assign (Email · Calendar · WhatsApp)
-            </button>
-          )}
           <button
             onClick={handleExportTouristsCSV}
             className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -455,26 +446,6 @@ export const TouristDirectoryView: React.FC<TouristDirectoryViewProps> = ({
           employees={employees}
           packages={packages}
           onBatchInsertOmnichannelClients={onBatchInsertOmnichannelClients}
-        />
-      )}
-
-      {/* Omnichannel AI Client Importer Modal */}
-      {isAdmin && (
-        <OmnichannelClientImportModal
-          isOpen={isOmnichannelModalOpen}
-          onClose={() => setIsOmnichannelModalOpen(false)}
-          isAdmin={isAdmin}
-          conversations={conversations}
-          calendarEvents={calendarEvents}
-          employees={employees}
-          packages={packages}
-          targetFormLabel="Tourist Registration Form"
-          onInsertIntoForm={(client) => {
-            setPreFilledOmnichannelClient(client);
-            setIsOmnichannelModalOpen(false);
-            setIsAddModalOpen(true);
-          }}
-          onBatchInsertClients={onBatchInsertOmnichannelClients}
         />
       )}
     </div>

@@ -52,12 +52,9 @@ export const DESTINATIONS_DATA: DestinationSlide[] = [
     tagline: "UNESCO World Heritage Site · Africa's Modernist Jewel",
     description:
       'Perched at 2,325 meters above sea level, Asmara is a pristine open-air museum of 1930s Italian futurist, art deco, and rationalist architecture. Famed for palm-lined Harnet Avenue, historic espresso cafés, Cinema Impero, and the iconic airplane-winged Fiat Tagliero building.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1548013146-72479768bada?w=1600&auto=format&fit=crop&q=85',
+    imageUrl: 'https://www.eritreavisit.com/wp-content/uploads/2019/05/LRM_EXPORT_271536296502385_20190211_032358454.jpeg',
     galleryImages: [
-      'https://images.unsplash.com/photo-1548013146-72479768bada?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1577495508048-b635879837f1?w=1200&auto=format&fit=crop&q=80',
+      'https://www.eritreavisit.com/wp-content/uploads/2019/05/LRM_EXPORT_271536296502385_20190211_032358454.jpeg',
     ],
     altitude: '2,325 m / 7,628 ft',
     bestTime: 'October – May (Mild Highlands Spring)',
@@ -79,12 +76,9 @@ export const DESTINATIONS_DATA: DestinationSlide[] = [
     tagline: 'Pearl of the Red Sea · Ottoman & Venetian Coral Heritage',
     description:
       'A historic port crossroads where Ottoman, Egyptian, and Italian architectural layers meet the turquoise Red Sea waters. Walk through coral-stone alleyways, visit the Sheikh Hanafi Mosque, and dine on fresh grilled red snapper by the active harbour docks.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1600&auto=format&fit=crop&q=85',
+    imageUrl: 'https://www.eritreavisit.com/wp-content/uploads/2018/11/index2.jpg',
     galleryImages: [
-      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1519046904884-53103b34b206?w=1200&auto=format&fit=crop&q=80',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/11/index2.jpg',
     ],
     altitude: '10 m / 33 ft (Coastline)',
     bestTime: 'November – April (Cool Sea Breeze)',
@@ -106,12 +100,13 @@ export const DESTINATIONS_DATA: DestinationSlide[] = [
     tagline: 'Untouched Island Wilderness · 350+ Marine Coral Species',
     description:
       'Over 200 uninhabited coral atolls and islands offering some of the purest, least-disturbed scuba diving on planet Earth. Swim with manta rays, sea turtles, and bottlenose dolphins among pristine coral gardens, with desert island camping under crystal Milky Way night skies.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1600&auto=format&fit=crop&q=85',
+    imageUrl: 'https://www.eritreavisit.com/wp-content/uploads/2018/08/p002.jpg',
     galleryImages: [
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1520255870062-bd79d3865de7?w=1200&auto=format&fit=crop&q=80',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/08/p002.jpg',
+      'https://www.eritreavisit.com/wp-content/uploads/2020/01/birds-in-dahlak.jpg',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/08/0011a.jpg',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/08/0009a.jpg',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/08/0008a.jpg',
     ],
     altitude: '0 m / Sea Level',
     bestTime: 'October – April (Calm Diving Waters)',
@@ -160,12 +155,9 @@ export const DESTINATIONS_DATA: DestinationSlide[] = [
     tagline: 'Cultural Crossroads · Historic Camel Market & Baobab Shrine',
     description:
       'Set in a lush mountain valley, Keren is the second-largest city and the cultural heart of the Bilen and Tigre peoples. Renowned worldwide for its bustling Monday camel and cattle market, Italian-era railway structures, and the sacred Mariam Dearit shrine housed in a hollow 500-year-old baobab tree.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1523805009345-7448845a9e53?w=1600&auto=format&fit=crop&q=85',
+    imageUrl: 'https://www.eritreavisit.com/wp-content/uploads/2018/11/indexdd.jpg',
     galleryImages: [
-      'https://images.unsplash.com/photo-1523805009345-7448845a9e53?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1509099836639-18ba1795216d?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=1200&auto=format&fit=crop&q=80',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/11/indexdd.jpg',
     ],
     altitude: '1,390 m / 4,560 ft',
     bestTime: 'All Year Round (Mondays for Livestock Market)',
@@ -239,11 +231,9 @@ export const DESTINATIONS_DATA: DestinationSlide[] = [
     tagline: 'The Great Hawulti Stele · Granite Monoliths & Mount Emba Soira',
     description:
       'Guarded by dramatic granite monolithic pinnacles, Metera is home to the famous 5-meter tall 3rd-century BC Hawulti Stele, inscribed with the oldest known royal Ge’ez text. Situated near Mount Emba Soira (3,018m), Eritrea’s highest peak.',
-    imageUrl:
-      'https://images.unsplash.com/photo-1489493887464-892be6d1daae?w=1600&auto=format&fit=crop&q=85',
+    imageUrl: 'https://www.eritreavisit.com/wp-content/uploads/2018/11/eritrea553310.jpg',
     galleryImages: [
-      'https://images.unsplash.com/photo-1489493887464-892be6d1daae?w=1200&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1200&auto=format&fit=crop&q=80',
+      'https://www.eritreavisit.com/wp-content/uploads/2018/11/eritrea553310.jpg',
     ],
     altitude: '2,200 m / 7,217 ft',
     bestTime: 'October – April',
@@ -255,6 +245,21 @@ export const DESTINATIONS_DATA: DestinationSlide[] = [
     ],
     climate: 'Cool, invigorating highland mountain climate',
     featuredTourTitle: 'Southern Antiquities & Metera Archaeological Trail',
+  },
+  {
+    id: 'timket-festival',
+    name: 'Timket in Eritrea',
+    region: 'Eritrea',
+    category: 'Festivals & Culture',
+    tagline: 'Eritrean Orthodox Epiphany',
+    description: 'Worshippers gather in white ceremonial clothing for Timket. This photograph comes from the Visit Eritrea festival collection.',
+    imageUrl: 'https://www.eritreavisit.com/wp-content/uploads/2026/10/1000026816.jpg',
+    galleryImages: ['https://www.eritreavisit.com/wp-content/uploads/2026/10/1000026816.jpg'],
+    altitude: 'Varies by celebration site',
+    bestTime: 'January',
+    highlights: ['Festival processions', 'Ceremonial dress and music'],
+    climate: 'Varies by celebration site',
+    featuredTourTitle: 'Timket Festival Tour',
   },
 ];
 

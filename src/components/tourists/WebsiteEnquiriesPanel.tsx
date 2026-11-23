@@ -39,6 +39,7 @@ import {
   FeedCalendarEvent,
 } from '../../types';
 import { BRAND } from '../../../shared/brand';
+import { api } from '../../lib/api';
 import { useWorkspace } from '../../lib/workspace';
 import { isAdmin } from '../../../shared/roles';
 import { OmnichannelClientImportModal } from '../common/OmnichannelClientImportModal';
@@ -135,7 +136,6 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
   canEdit = false,
   onUpdateEnquiry,
   onAddEnquiry,
-  onBatchInsertOmnichannelClients,
   onConvert,
   onConvertBookedLeadToBooking,
 }) => {
@@ -171,7 +171,8 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
   const [tourTitle, setTourTitle] = useState('');
   const [expectedTravelDate, setExpectedTravelDate] = useState('');
   const [expectedReturnDate, setExpectedReturnDate] = useState('');
-  const [partySize, setPartySize] = useState<number>(2);
+  const [partySize, setPartySize] = useState<number | ''>('');
+  const [inboxSource, setInboxSource] = useState<Conversation | null>(null);
   const [assignedAgent, setAssignedAgent] = useState('');
   const [quotationValue, setQuotationValue] = useState<number>(0);
   const [quotationCurrency, setQuotationCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'CHF' | 'ERN'>('USD');
@@ -184,6 +185,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
   const [notes, setNotes] = useState('');
 
   const applyOmnichannelClientToLeadForm = (client: OmnichannelExtractedClient) => {
+    setInboxSource(null);
     setEditingLead(null);
     setFullName(client.fullName || '');
     setEmail(client.email || '');
@@ -268,6 +270,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
   }, [enquiries, stageFilter, onlyOverdue, searchQuery, todayISO, userIsAdmin]);
 
   const openNewLeadModal = () => {
+    setInboxSource(null);
     setEditingLead(null);
     setFullName('');
     setEmail('');
@@ -278,7 +281,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     setTourTitle('');
     setExpectedTravelDate('');
     setExpectedReturnDate('');
-    setPartySize(2);
+    setPartySize('');
     setAssignedAgent(user?.fullName || employees[0]?.name || 'Sales Desk');
     setQuotationValue(0);
     setQuotationCurrency('USD');
@@ -292,6 +295,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
   };
 
   const openEditLeadModal = (lead: WebsiteEnquiry) => {
+    setInboxSource(null);
     setEditingLead(lead);
     setFullName(lead.fullName || '');
     setEmail(lead.email || '');
@@ -302,7 +306,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     setTourTitle(lead.tourTitle || '');
     setExpectedTravelDate(lead.expectedTravelDate || lead.preferredDate || '');
     setExpectedReturnDate(lead.expectedReturnDate || '');
-    setPartySize(lead.partySize || 1);
+    setPartySize(lead.partySize ?? '');
     setAssignedAgent(lead.assignedAgent || lead.assignedTo || user?.fullName || '');
     setQuotationValue(lead.quotationValue || 0);
     setQuotationCurrency(lead.quotationCurrency || 'USD');
@@ -323,7 +327,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
 
     const payload: WebsiteEnquiry = {
       ...(enquiries.find(lead => lead.id === editingLead?.id) || editingLead),
-      id: editingLead?.id || `enq-${crypto.randomUUID()}`,
+      id: editingLead?.id || (inboxSource ? `inbox-${inboxSource.id}` : `enq-${crypto.randomUUID()}`),
       fullName: fullName.trim(),
       email: email.trim(),
       phone: phone.trim() || null,
@@ -331,7 +335,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
       tourId: editingLead?.tourId || null,
       tourTitle: tourTitle.trim() || interestedService,
       preferredDate: expectedTravelDate || null,
-      partySize: Number(partySize) || 1,
+      partySize: Number(partySize) || null,
       message: message.trim() || `Interested in ${interestedService}`,
       source: leadSource,
       status: STAGE_TO_LEGACY_STATUS[stage],
@@ -351,10 +355,14 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
       linkedBookingId: editingLead?.linkedBookingId,
       operationalBookingStatus,
       paymentStatus,
-      receivedAt: editingLead?.receivedAt || new Date().toISOString(),
+      receivedAt: editingLead?.receivedAt || (inboxSource?.messages.find(m => m.sender === 'client')?.timestamp) || new Date().toISOString(),
       handledAt: new Date().toISOString(),
     };
 
+    if (inboxSource && enquiries.some(lead => lead.id === payload.id)) {
+      setIsLeadModalOpen(false);
+      return;
+    }
     if (editingLead) {
       onUpdateEnquiry(payload);
     } else if (onAddEnquiry) {
@@ -542,6 +550,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
         </div>
       </div>
 
+      {userIsAdmin && <AgencyContactRegister />}
       {expanded && viewMode === 'worklist' && (
         <div className="p-4"><CrmWorklist leads={enquiries} stageOf={resolveLeadStage} agent={user?.fullName || 'Sales desk'}
           canEdit={canEdit} onSave={onUpdateEnquiry} /></div>
@@ -939,6 +948,24 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
             </div>
 
             <form onSubmit={handleSaveLead} className="p-6 space-y-4 text-xs text-slate-900 max-h-[80vh] overflow-y-auto">
+              {userIsAdmin && !editingLead && <label className="grid gap-1 text-sm">Use a saved inbox message
+                <select className="rounded-lg border p-2" value={inboxSource?.id || ''} onChange={e => {
+                  const item = conversations.find(c => c.id === e.target.value);
+                  openNewLeadModal();
+                  if (!item) return;
+                  const original = item.messages.find(m => m.sender === 'client');
+                  setInboxSource(item);
+                  setFullName(item.clientName === 'Client' ? '' : item.clientName);
+                  setLeadSource(item.channel);
+                  setMessage(original?.text || '');
+                  const sender = original?.senderName || '';
+                  setEmail(item.channel === 'Email' ? sender.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || '' : '');
+                  setPhone(item.channel === 'WhatsApp' ? sender.match(/\+[\d ()-]{6,}\d/)?.[0] || '' : '');
+                }}>
+                  <option value="">Enter manually</option>
+                  {conversations.filter(c => c.messages.some(m => m.sender === 'client') && !enquiries.some(l => l.id === 'inbox-' + c.id)).map(c =>
+                    <option key={c.id} value={c.id}>{c.channel} · {c.clientName} · {c.subject || c.lastTimestamp}</option>)}
+                </select></label>}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Client Full Name *</label>
@@ -995,6 +1022,8 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                   >
                     <option value="Website Contact Form">Website Contact Form</option>
                     <option value="WhatsApp Line (+2917190374)">WhatsApp Line (+2917190374)</option>
+                    <option>Email</option>
+                    <option>WhatsApp</option>
                     <option value="Direct Inquiry / Phone">Direct Inquiry / Phone</option>
                     <option value="Walk-In (Asmara Office)">Walk-In (Asmara Office)</option>
                     <option value="Partner Tour Operator">Partner Tour Operator</option>
@@ -1071,7 +1100,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                     type="number"
                     min={1}
                     value={partySize}
-                    onChange={(e) => setPartySize(Number(e.target.value) || 1)}
+                    onChange={(e) => setPartySize(e.target.value ? Number(e.target.value) : '')}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold"
                   />
                 </div>
@@ -1207,7 +1236,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
         <OmnichannelClientImportModal isOpen onClose={() => setIsOmnichannelModalOpen(false)}
           isAdmin={userIsAdmin} conversations={conversations} calendarEvents={calendarEvents} employees={employees}
           packages={packages} targetFormLabel="CRM lead" onInsertIntoForm={applyOmnichannelClientToLeadForm}
-          onBatchInsertClients={onBatchInsertOmnichannelClients} />
+          />
       )}
       {convertingLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -1344,3 +1373,84 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     </div>
   );
 };
+
+const contactColumns = ['id', 'fullName', 'email', 'phone', 'address', 'residentialCity', 'residentialCountry', 'nationality', 'notes', 'category', 'lastContactSource'];
+const enquiryColumns = ['id','fullName','email','phone','country','tourTitle','message','leadSource','notes','receivedAt','stage','partySize','expectedTravelDate','expectedReturnDate','nextFollowUpDate'];
+type IntakeRow = Record<string, string | number>;
+
+function parseIntake(text: string, existingClients: any[], existingLeads: any[]) {
+  const parsed = JSON.parse(text);
+  if (!Array.isArray(parsed.contacts) || !Array.isArray(parsed.inquiries)) throw new Error('Provide contacts and inquiries as arrays.');
+  function prepare(rows: unknown[], fields: string[], existing: any[], contacts: boolean) {
+    const ids = new Set(existing.map(r => r.id));
+    const emails = new Set(existing.map(r => String(r.email || '').trim().toLowerCase()).filter(Boolean));
+    const result: IntakeRow[] = [];
+    for (const [index, input] of rows.entries()) {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid row ' + (index + 1));
+      const row: IntakeRow = {};
+      for (const [k,v] of Object.entries(input)) {
+        if (fields.includes(k) && (typeof v === 'string' || typeof v === 'number')) row[k] = typeof v === 'string' ? v.trim() : v;
+      }
+      if (typeof row.id !== 'string' || !row.id || typeof row.fullName !== 'string' || !row.fullName) throw new Error('Row ' + (index + 1) + ' needs an ID and a name.');
+      const email = String(row.email || '').toLowerCase();
+      if (ids.has(row.id) || (contacts && email && emails.has(email))) continue;
+      ids.add(row.id);
+      if (email) emails.add(email);
+      if (contacts) {
+        Object.assign(row, {clientCode: row.id, passportNumber: '', passportExpiry: '', nationality: row.nationality || '', category: row.category || 'Individual', email, phone: String(row.phone || '')});
+      } else {
+        if (!CRM_STAGES.includes(row.stage as CrmPipelineStage) || !row.message || !Number.isFinite(Date.parse(String(row.receivedAt)))) throw new Error('Each inquiry needs a supported sales stage, a message and a received date.');
+        row.status = STAGE_TO_LEGACY_STATUS[row.stage as CrmPipelineStage];
+        row.email = email;
+      }
+      result.push(row);
+    }
+    return result;
+  }
+  return {contacts: prepare(parsed.contacts,contactColumns,existingClients,true), inquiries: prepare(parsed.inquiries,enquiryColumns,existingLeads,false)};
+}
+
+function AgencyContactRegister() {
+  const {collections, reload} = useWorkspace();
+  const contacts = collections.ticketingClients || [];
+  const [open, setOpen] = useState(false);
+  const [importing,setImporting] = useState(false);
+  const [input,setInput] = useState('');
+  const [query,setQuery] = useState('');
+  const [review,setReview] = useState<ReturnType<typeof parseIntake> | null>(null);
+  const [busy,setBusy] = useState(false);
+  const [notice,setNotice] = useState('');
+  const shown = contacts.filter(c => [c.fullName,c.email,c.phone,c.address,c.notes].some(v=>String(v||'').toLowerCase().includes(query.toLowerCase().trim())));
+  async function save() {
+    if (!review || busy) return;
+    setBusy(true);
+    try {
+      for (const [collection,rows] of [['ticketingClients', review.contacts], ['websiteEnquiries',review.inquiries]] as const) {
+        if (!rows.length) continue;
+        const response = await api.post<{written:number;skipped:number;errors:string[]}>('admin/import',{collection,rows,source:'Reviewed CRM sources'});
+        if (response.errors?.length || response.written + response.skipped !== rows.length) throw new Error('Some rows could not be saved. Review the remaining records.');
+      }
+      await reload(); setNotice('Import complete. The register and sales pipeline have been refreshed.'); setReview(null); setInput(''); setImporting(false);
+    } catch(error) {
+      setNotice(error instanceof Error ? error.message : 'Import failed.'); setReview(null); await reload();
+    } finally {setBusy(false);}
+  }
+  const control='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm';
+  return <section className="mx-5 my-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <button type="button" aria-expanded={open} className="font-semibold text-slate-900" onClick={()=>setOpen(!open)}>Client register ({contacts.length})</button>
+    {open && <div className="mt-3 space-y-3"><div className="flex flex-wrap gap-2">
+      <input className={control} aria-label="Search client register" placeholder="Name, email, address or source" value={query} onChange={e=>setQuery(e.target.value)}/>
+      <button className={control} type="button" onClick={()=>{setImporting(!importing);setNotice('');}}>Import reviewed records</button></div>
+      {importing && <div className="space-y-2"><label className="grid gap-1 text-sm">Reviewed records (JSON)
+        <textarea aria-label="Reviewed records JSON" className={control} rows={4} disabled={busy} value={input} onChange={e=>{setInput(e.target.value);setReview(null);}}/></label>
+        <p className="text-xs">Use contacts and inquiries arrays. Give each row a source ID and fullName. Inquiries also require stage, receivedAt and message. Existing IDs and contact emails are skipped.</p>
+        <button type="button" className={control} disabled={busy || !input.trim()} onClick={()=>{try{setReview(parseIntake(input,contacts,collections.websiteEnquiries || []));setNotice('');}catch(e){setNotice(e instanceof Error ? e.message : 'Invalid input');setReview(null);}}}>Review records</button>
+        {review && <div><p>{review.contacts.length} new contacts · {review.inquiries.length} new inquiries</p>
+          <button type="button" disabled={busy || !(review.contacts.length+review.inquiries.length)} className={control} onClick={save}>{busy?'Saving…':'Save reviewed records'}</button></div>}</div>}
+      {notice && <p role="status" className="text-sm">{notice}</p>}
+      {shown.length ? <ul className="max-h-96 overflow-y-auto divide-y divide-slate-200">{shown.map(c=><li key={c.id} className="py-2">
+        <details><summary className="cursor-pointer font-semibold">{c.fullName}{c.email && ' · '+c.email}</summary>
+          <p className="text-sm">{[c.phone,c.address,c.residentialCity,c.residentialCountry].filter(Boolean).join(' · ')}</p>
+          <p className="whitespace-pre-line text-sm">{c.notes}</p></details></li>)}</ul>:<p className="text-sm">No matching contacts.</p>}</div>}
+  </section>;
+}

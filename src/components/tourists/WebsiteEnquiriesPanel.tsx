@@ -42,7 +42,10 @@ import { BRAND } from '../../../shared/brand';
 import { useWorkspace } from '../../lib/workspace';
 import { isAdmin } from '../../../shared/roles';
 import { OmnichannelClientImportModal } from '../common/OmnichannelClientImportModal';
-import { OmnichannelExtractedClient, toWebsiteEnquiry } from '../../lib/omnichannelClientImport';
+import { OmnichannelExtractedClient } from '../../lib/omnichannelClientImport';
+
+import { CrmWorklist, quoteTotals } from './CrmWorklist';
+import { eritreaDateString } from '../../../shared/feedSchema';
 
 export const CRM_STAGES: CrmPipelineStage[] = [
   'New Lead',
@@ -63,8 +66,9 @@ const STAGE_TO_LEGACY_STATUS: Record<CrmPipelineStage, WebsiteEnquiry['status']>
 };
 
 export function resolveLeadStage(enquiry: WebsiteEnquiry): CrmPipelineStage {
-  if (enquiry.stage && CRM_STAGES.includes(enquiry.stage)) {
-    return enquiry.stage;
+  const stage = enquiry.stage || enquiry.crmStage;
+  if (stage && CRM_STAGES.includes(stage)) {
+    return stage;
   }
   switch (enquiry.status) {
     case 'New':
@@ -139,7 +143,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
   const userIsAdmin = isAdmin(user?.role as any);
 
   const [expanded, setExpanded] = useState(true);
-  const [viewMode, setViewMode] = useState<'pipeline' | 'table'>('pipeline');
+  const [viewMode, setViewMode] = useState<'pipeline' | 'table' | 'worklist'>('pipeline');
   const [stageFilter, setStageFilter] = useState<'all' | CrmPipelineStage>('all');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -192,11 +196,11 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     setExpectedReturnDate(client.expectedReturnDate || '');
     setPartySize(client.partySize || 1);
     setAssignedAgent(client.assignedAgent || user?.fullName || 'Sales Desk');
-    setQuotationValue(client.quotationValue || 1450);
+    setQuotationValue(client.quotationValue || 0);
     setQuotationCurrency(client.quotationCurrency || 'USD');
     setNextFollowUpDate(
       client.nextFollowUpDate ||
-        new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0]
+        eritreaDateString(new Date(Date.now() + 2 * 86400000))
     );
     setStage(client.crmStage || 'New Lead');
     setOperationalBookingStatus(
@@ -210,7 +214,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     setIsLeadModalOpen(true);
   };
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = eritreaDateString();
 
   const isLeadOverdue = (lead: WebsiteEnquiry): boolean => {
     const resolved = resolveLeadStage(lead);
@@ -249,9 +253,9 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
         if (stageFilter !== 'all' && st !== stageFilter) return false;
         if (onlyOverdue && !isLeadOverdue(e)) return false;
         if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
+          const q = searchQuery.trim().toLowerCase();
           const matchName = (e.fullName || '').toLowerCase().includes(q);
-          const matchService = (e.interestedService || e.tourTitle || '').toLowerCase().includes(q);
+          const matchService = [e.interestedService, e.tourTitle, e.phone, userIsAdmin && e.email].some(value => value && value.toLowerCase().includes(q));
           const matchAgent = (e.assignedAgent || e.assignedTo || '').toLowerCase().includes(q);
           const matchSource = (e.leadSource || e.source || '').toLowerCase().includes(q);
           const matchCountry = (e.country || '').toLowerCase().includes(q);
@@ -261,7 +265,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
         }
         return true;
       });
-  }, [enquiries, stageFilter, onlyOverdue, searchQuery, todayISO]);
+  }, [enquiries, stageFilter, onlyOverdue, searchQuery, todayISO, userIsAdmin]);
 
   const openNewLeadModal = () => {
     setEditingLead(null);
@@ -271,15 +275,14 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     setCountry('');
     setLeadSource('Direct Inquiry / Phone');
     setInterestedService('Guided Tour Package');
-    setTourTitle(packages[0]?.title || 'Asmara, Massawa & Qohaito Circuit');
+    setTourTitle('');
     setExpectedTravelDate('');
     setExpectedReturnDate('');
     setPartySize(2);
     setAssignedAgent(user?.fullName || employees[0]?.name || 'Sales Desk');
-    setQuotationValue(1850);
+    setQuotationValue(0);
     setQuotationCurrency('USD');
-    const tomorrow = new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0];
-    setNextFollowUpDate(tomorrow);
+    setNextFollowUpDate(eritreaDateString(new Date(Date.now() + 2 * 86400000)));
     setStage('New Lead');
     setOperationalBookingStatus('Unbooked');
     setPaymentStatus('Pending');
@@ -316,10 +319,11 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
 
   const handleSaveLead = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) return;
+    if (!canEdit || !fullName.trim()) return;
 
     const payload: WebsiteEnquiry = {
-      id: editingLead?.id || `enq-${Date.now()}`,
+      ...(enquiries.find(lead => lead.id === editingLead?.id) || editingLead),
+      id: editingLead?.id || `enq-${crypto.randomUUID()}`,
       fullName: fullName.trim(),
       email: email.trim(),
       phone: phone.trim() || null,
@@ -332,6 +336,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
       source: leadSource,
       status: STAGE_TO_LEGACY_STATUS[stage],
       stage,
+      crmStage: stage,
       leadSource,
       interestedService,
       expectedTravelDate: expectedTravelDate || undefined,
@@ -364,6 +369,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     const updated: WebsiteEnquiry = {
       ...lead,
       stage: nextStage,
+      crmStage: nextStage,
       status: STAGE_TO_LEGACY_STATUS[nextStage],
       handledAt: new Date().toISOString(),
     };
@@ -421,9 +427,16 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
     setConvPaymentStatus(lead.paymentStatus || 'Pending');
   };
 
+  // Departure bookings record amounts in USD. Link an existing booking for other currencies.
+  const conversionIssue = convertingLead && !selectedExistingBookingId
+    ? !convertingLead.quotationValue ? 'Enter the agreed party quote before creating a booking.'
+      : convertingLead.quotationCurrency && convertingLead.quotationCurrency !== 'USD'
+        ? 'Link an existing booking or enter an agreed USD quote to create a departure booking.' : ''
+    : '';
+
   const handleConfirmConversion = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!convertingLead) return;
+    if (!canEdit || !convertingLead || conversionIssue) return;
 
     if (onConvertBookedLeadToBooking) {
       onConvertBookedLeadToBooking(convertingLead, {
@@ -481,7 +494,11 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* View switcher: Pipeline vs Table */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs">
+          <div className="flex flex-wrap items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs">
+            <button type="button" aria-pressed={viewMode === 'worklist'} onClick={() => { setExpanded(true); setViewMode('worklist'); }}
+              className={`px-3 py-1.5 rounded-lg font-semibold ${viewMode === 'worklist' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'}`}>
+              Daily worklist
+            </button>
             <button
               type="button"
               onClick={() => setViewMode('pipeline')}
@@ -508,6 +525,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
 
           <button
             type="button"
+            disabled={!canEdit}
             onClick={openNewLeadModal}
             className="px-4 py-2 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
@@ -524,7 +542,11 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
         </div>
       </div>
 
-      {expanded && (
+      {expanded && viewMode === 'worklist' && (
+        <div className="p-4"><CrmWorklist leads={enquiries} stageOf={resolveLeadStage} agent={user?.fullName || 'Sales desk'}
+          canEdit={canEdit} onSave={onUpdateEnquiry} /></div>
+      )}
+      {expanded && viewMode !== 'worklist' && (
         <div className="p-5 space-y-4">
           {/* Stage Count Bar & Filters */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -591,7 +613,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               {CRM_STAGES.map((colStage) => {
                 const colLeads = filteredEnquiries.filter((l) => resolveLeadStage(l) === colStage);
-                const colTotalValue = colLeads.reduce((acc, l) => acc + (Number(l.quotationValue) || 0), 0);
+                const totals = quoteTotals(colLeads);
 
                 return (
                   <div
@@ -613,10 +635,10 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                         </span>
                       </div>
 
-                      {colTotalValue > 0 && (
+                      {totals.length > 0 && (
                         <div className="mb-2 px-2 py-1 rounded-lg bg-white border border-slate-200/80 text-[10px] font-mono text-slate-600 flex items-center justify-between">
-                          <span>Pipeline Value:</span>
-                          <span className="font-bold text-emerald-700">${colTotalValue.toLocaleString()}</span>
+                          <span>Quoted</span>
+                          <span className="font-bold text-emerald-700">{totals.join(' · ')}</span>
                         </div>
                       )}
 
@@ -648,6 +670,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                                   </div>
                                   <button
                                     type="button"
+                                    disabled={!canEdit}
                                     onClick={() => openEditLeadModal(lead)}
                                     className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
                                     title="Edit Lead"
@@ -719,6 +742,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                                 {/* Stage Selector & Convert/Link Button */}
                                 <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
                                   <select
+                                    disabled={!canEdit}
                                     value={colStage}
                                     onChange={(e) => handleStageChange(lead, e.target.value as CrmPipelineStage)}
                                     className="w-full text-[10px] rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-semibold text-slate-800 cursor-pointer"
@@ -733,6 +757,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                                   {(colStage === 'Booked' || colStage === 'Negotiation' || colStage === 'Completed') && (
                                     <button
                                       type="button"
+                                      disabled={!canEdit}
                                       onClick={() => openBookingConversionModal(lead)}
                                       className="w-full px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
                                     >
@@ -829,6 +854,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                           </td>
                           <td className="py-3 px-3.5">
                             <select
+                              disabled={!canEdit}
                               value={st}
                               onChange={(e) => handleStageChange(lead, e.target.value as CrmPipelineStage)}
                               className={`text-[11px] rounded-lg border px-2 py-1 font-bold cursor-pointer ${STAGE_STYLES[st]}`}
@@ -853,6 +879,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                           <td className="py-3 px-3.5 text-right whitespace-nowrap space-x-1.5">
                             <button
                               type="button"
+                              disabled={!canEdit}
                               onClick={() => openEditLeadModal(lead)}
                               className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] cursor-pointer"
                             >
@@ -860,6 +887,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                             </button>
                             <button
                               type="button"
+                              disabled={!canEdit}
                               onClick={() => openBookingConversionModal(lead)}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] cursor-pointer"
                             >
@@ -1028,6 +1056,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">Expected Return</label>
                   <input
                     type="date"
+                    min={expectedTravelDate || undefined}
                     value={expectedReturnDate}
                     onChange={(e) => setExpectedReturnDate(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono"
@@ -1047,10 +1076,11 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Quotation Value</label>
+                  <label className="block font-bold text-slate-700 mb-1">Total party quote</label>
                   <input
                     type="number"
                     min={0}
+                    step="0.01"
                     value={quotationValue}
                     onChange={(e) => setQuotationValue(Number(e.target.value) || 0)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold text-emerald-700"
@@ -1173,6 +1203,12 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
       )}
 
       {/* CONVERT / LINK BOOKED LEAD MODAL (WITH DUPLICATE PREVENTION) */}
+      {userIsAdmin && canEdit && isOmnichannelModalOpen && (
+        <OmnichannelClientImportModal isOpen onClose={() => setIsOmnichannelModalOpen(false)}
+          isAdmin={userIsAdmin} conversations={conversations} calendarEvents={calendarEvents} employees={employees}
+          packages={packages} targetFormLabel="CRM lead" onInsertIntoForm={applyOmnichannelClientToLeadForm}
+          onBatchInsertClients={onBatchInsertOmnichannelClients} />
+      )}
       {convertingLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
@@ -1203,7 +1239,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                 <div className="text-slate-600">
                   Service: <strong>{convertingLead.interestedService || convertingLead.tourTitle || 'Tour Package'}</strong> · Quote:{' '}
                   <strong className="font-mono text-emerald-700">
-                    {convertingLead.quotationValue || 1850} {convertingLead.quotationCurrency || 'USD'}
+                    {convertingLead.quotationValue ? `${convertingLead.quotationValue} ${convertingLead.quotationCurrency || 'USD'}` : 'Awaiting quote'}
                   </strong>
                 </div>
               </div>
@@ -1256,6 +1292,7 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                 </select>
               </div>
 
+              {conversionIssue && <p role="status" className="text-sm text-amber-900">{conversionIssue}</p>}
               {/* Step 3: Separate Operational & Payment Statuses */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
@@ -1294,8 +1331,8 @@ export const WebsiteEnquiriesPanel: React.FC<WebsiteEnquiriesPanelProps> = ({
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-5 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  type="submit" disabled={Boolean(conversionIssue)}
+                  className="disabled:opacity-50 px-5 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Confirm &amp; Link Booking
                 </button>

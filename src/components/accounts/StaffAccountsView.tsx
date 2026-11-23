@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { KeyRound, Loader2, Plus, ShieldCheck, UserCog, UserX } from 'lucide-react';
+import { useWorkspace } from '../../lib/workspace';
 import { api, ApiError } from '../../lib/api';
 import { ROLES, ROLE_KEYS, getRoleDefinition, type RoleKey } from '../../../shared/roles';
 
@@ -23,6 +24,19 @@ const emptyDraft = {
 };
 
 export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ currentUserId }) => {
+  const { collections } = useWorkspace();
+  const candidates: { name: string; role: RoleKey; note: string }[] =
+    (collections.departments || []).flatMap(d => d.onboardingCandidates || []);
+  const [assignment, setAssignment] = useState<StaffAccount | null>(null);
+  const [candidateNote, setCandidateNote] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  function closeForm() {
+    setShowCreate(false);
+    setAssignment(null);
+    setDraft(emptyDraft);
+    setCandidateNote('');
+    setShowPassword(false);
+  }
   const [accounts, setAccounts] = useState<StaffAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +46,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
   const [showCreate, setShowCreate] = useState(false);
   const [resetFor, setResetFor] = useState<StaffAccount | null>(null);
   const [resetPassword, setResetPassword] = useState('');
-  const [resetMustChange, setResetMustChange] = useState(false);
+  const [resetMustChange, setResetMustChange] = useState(true);
   const [resetting, setResetting] = useState(false);
 
   const load = async () => {
@@ -57,13 +71,19 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
     setCreating(true);
     setError(null);
     try {
-      await api.post('accounts', draft);
-      setNotice(`Account "${draft.username}" created. They must set a new password at first sign-in.`);
-      setDraft(emptyDraft);
-      setShowCreate(false);
+      const values = { ...draft, username: draft.username.trim().toLowerCase(), fullName: draft.fullName.trim(), email: draft.email.trim() };
+      if (!values.fullName || !values.username) throw new Error('Enter a name and username.');
+      if (assignment) {
+        await api.patch('accounts/' + assignment.id, {fullName: values.fullName, email: values.email, role: values.role,
+          password: values.password, mustChangePassword: true, active: true});
+      } else {
+        await api.post('accounts', values);
+      }
+      setNotice(`Account "${values.username}" is ready for ${values.fullName}. Give them the temporary password privately for their first sign-in.`);
+      closeForm();
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create the account.');
+      setError(err instanceof Error ? err.message : 'Could not create the account.');
     } finally {
       setCreating(false);
     }
@@ -74,8 +94,10 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
     try {
       await api.patch(`accounts/${account.id}`, changes);
       await load();
+      return true;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update the account.');
+      return false;
     }
   };
 
@@ -90,12 +112,28 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
           </p>
         </div>
         <button
-          onClick={() => setShowCreate((open) => !open)}
+          onClick={() => { closeForm(); setShowCreate(!showCreate || Boolean(assignment)); }}
           className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition cursor-pointer"
         >
           <Plus className="h-4 w-4" /> New account
         </button>
       </div>
+
+      <section aria-label="Launch setup" className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h3 className="font-bold text-slate-900">Launch setup</h3>
+        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
+          {[
+            ['Staff sign-ins enabled', loading ? '…' : accounts.filter(a => a.active && a.role !== 'CEO').length],
+            ['Roster candidates', candidates.length],
+            ['Departments', (collections.departments || []).length],
+            ['Lodging partners', (collections.hotels || []).length],
+            ['Fleet assets', (collections.vehicles || []).length],
+            ['Scheduled departures', (collections.schedules || []).length],
+            ['Client records', (collections.ticketingClients || []).length],
+            ['Sales inquiries', (collections.websiteEnquiries || []).length]
+          ].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3"><dt className="text-slate-600">{label}</dt><dd className="mt-1 text-xl font-semibold">{value}</dd></div>)}
+        </dl>
+      </section>
 
       {notice && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
@@ -108,12 +146,25 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
 
       {showCreate && (
         <form onSubmit={create} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+          <h3 className="mb-3 font-bold">{assignment ? 'Assign and activate @' + assignment.username : 'New staff sign-in'}</h3>
+          {candidates.length > 0 && <label className="mb-4 block text-sm font-semibold">Choose a roster candidate (optional)
+            <select className="mt-1 block w-full rounded-lg border p-2" defaultValue="" onChange={e=>{
+              const person=candidates.find(c=>c.name===e.target.value);
+              if (!person) {setCandidateNote(''); return;}
+              setDraft(d=>({...d, fullName:person.name, role:person.role, username:assignment?.username || person.name.toLowerCase().replace(/[^a-z0-9.]/g,'')}));
+              setCandidateNote(person.note);
+            }}>
+              <option value="">Enter a staff member manually</option>
+              {candidates.map(c=><option key={c.name} value={c.name}>{c.name} · {getRoleDefinition(c.role).label}</option>)}
+            </select>
+          </label>}
+          {candidateNote && <p className="mb-3 text-sm text-amber-800">{candidateNote}</p>}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { key: 'fullName', label: 'Full name', placeholder: 'Selam Tesfay', type: 'text' },
               { key: 'username', label: 'Username', placeholder: 'selam', type: 'text' },
               { key: 'email', label: 'Work email', placeholder: 'selam@eritreavisit.com', type: 'email' },
-              { key: 'password', label: 'Temporary password', placeholder: 'At least 8 characters', type: 'text' },
+              { key: 'password', label: 'Temporary password', placeholder: 'At least 8 characters', type: showPassword ? 'text' : 'password' },
             ].map((field) => (
               <label key={field.key} className="block">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -121,6 +172,9 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
                 </span>
                 <input
                   type={field.type}
+                  disabled={Boolean(assignment) && field.key === 'username'}
+                  autoComplete={field.key === 'password' ? 'new-password' : 'off'}
+                  minLength={field.key === 'password' ? 8 : undefined}
                   required={field.key !== 'email'}
                   value={(draft as any)[field.key]}
                   placeholder={field.placeholder}
@@ -144,6 +198,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
               </select>
             </label>
           </div>
+          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={showPassword} onChange={e=>setShowPassword(e.target.checked)}/>Show temporary password</label>
           <p className="mt-3 text-xs text-slate-500">{getRoleDefinition(draft.role).description}</p>
           <div className="mt-5 flex gap-3">
             <button
@@ -151,11 +206,11 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
               disabled={creating}
               className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 flex items-center gap-2 cursor-pointer"
             >
-              {creating && <Loader2 className="h-4 w-4 animate-spin" />} Create account
+              {creating && <Loader2 className="h-4 w-4 animate-spin" />} {assignment ? 'Assign and activate' : 'Create account'}
             </button>
             <button
               type="button"
-              onClick={() => setShowCreate(false)}
+              onClick={closeForm}
               className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
             >
               Cancel
@@ -226,13 +281,23 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
                         <button
                           onClick={() => {
                             setResetFor(account);
+                            setResetMustChange(true);
                             setResetPassword('');
                           }}
                           className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
                         >
                           <KeyRound className="h-3.5 w-3.5" /> Reset password
                         </button>
-                        {account.id !== currentUserId && (
+                        {!account.active && account.id !== currentUserId && (
+                          <button className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold" onClick={()=>{
+                            setAssignment(account);
+                            setCandidateNote('');
+                            setShowPassword(false);
+                            setDraft({...emptyDraft, username:account.username, fullName:account.fullName.includes('Awaiting assignment')?'':account.fullName, email:account.email || '', role:account.role});
+                            setShowCreate(true);
+                          }}>Assign and activate</button>
+                        )}
+                        {account.id !== currentUserId && !(!account.active && account.fullName.includes('Awaiting assignment')) && (
                           <button
                             onClick={() => patch(account, { active: !account.active })}
                             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold cursor-pointer ${
@@ -266,10 +331,11 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
             </p>
             <input
               autoFocus
-              type="text"
+              type="password"
+              autoComplete="new-password"
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
-              placeholder="New password (e.g. Eritre@2026!)"
+              placeholder="At least 8 characters"
               className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-amber-500 focus:bg-white"
             />
             <label className="mt-3 flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
@@ -287,7 +353,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
                 onClick={async () => {
                   setResetting(true);
                   try {
-                    await patch(resetFor, { password: resetPassword, mustChangePassword: resetMustChange });
+                    if (!await patch(resetFor, { password: resetPassword, mustChangePassword: resetMustChange })) return;
                     setNotice(`Password updated successfully for ${resetFor.fullName}.`);
                     setResetFor(null);
                     setResetPassword('');

@@ -13,6 +13,16 @@ export const PermitDocumentPreview: React.FC<PermitDocumentPreviewProps> = ({
   permit,
   onPrint,
 }) => {
+  if (permit.tripPacketId && permit.notes) return (
+    <section className="space-y-4">
+      <button className="rounded-lg border px-3 py-2" onClick={()=>printElement('printable-permit-doc', permit.permitNumber)}>Print request / save PDF</button>
+      <article id="printable-permit-doc" className="rounded-lg border bg-white p-6">
+        <small>{permit.permitNumber} · {permit.letterDate} · {permit.status}</small>
+        <h2 className="my-3 text-xl font-bold">Regional travel permit request</h2>
+        <div className="whitespace-pre-wrap leading-relaxed" style={{whiteSpace:'pre-wrap'}}>{permit.notes}</div>
+      </article>
+    </section>
+  );
   const handlePrint = () => {
     if (onPrint) {
       onPrint();

@@ -2,6 +2,7 @@
  * The whole HTTP API for the suite, shared by deployed functions and Netlify
  * Dev. Both environments therefore enforce exactly the same rules.
  */
+import { tripDesk } from "./tripDesk.ts";
 import { handleMessaging } from "./messaging.ts";
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
@@ -3430,7 +3431,7 @@ async function handleAdmin(user: SessionUser, req: ApiRequest, rest: string[]): 
     let skipped = 0;
     const perCollection: Record<string, number> = {};
     for (const [collection, rows] of Object.entries(payload)) {
-      if (!COLLECTIONS.includes(collection) || !Array.isArray(rows)) continue;
+      if (![...COLLECTIONS, "itineraryPackets", "itineraryFiledTrips"].includes(collection) || !Array.isArray(rows)) continue;
       const result = await bulkWrite(user, collection, rows as any[]);
       written += result.written;
       skipped += result.skipped;
@@ -3709,6 +3710,8 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
   if (!user) return fail(401, "Sign in required.");
 
   if (user.mustChangePassword) return fail(403, "Change your password before continuing.");
+
+  if (head === "trip-desk") return tripDesk(req, rest[0], user);
 
   if (head === "messaging") {
     if (!ROLES[user.role].view.includes("messages")) return fail(403, "Messaging is unavailable for your role.");
@@ -4418,7 +4421,7 @@ Return JSON:
 
     let inserted = 0;
     for (const [collection, rows] of Object.entries(payload)) {
-      if (!COLLECTIONS.includes(collection) || !Array.isArray(rows)) continue;
+      if (![...COLLECTIONS, "itineraryPackets", "itineraryFiledTrips"].includes(collection) || !Array.isArray(rows)) continue;
       const existing = await db
         .select({ id: records.id })
         .from(records)

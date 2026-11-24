@@ -59,6 +59,8 @@ import { TourCalendarView } from './components/tours/TourCalendarView';
 import { TouristDirectoryView } from './components/tourists/TouristDirectoryView';
 import { VisaPermitGeneratorView } from './components/documents/VisaPermitGeneratorView';
 import { TicketManagementView } from './components/tickets/TicketManagementView';
+import { TripPreparationDesk } from './components/packages/TripPreparationDesk';
+import { canPrepareTrip } from '../shared/tripPreparation';
 import { TourPackagesView } from './components/packages/TourPackagesView';
 import { TransportManagementView } from './components/transport/TransportManagementView';
 import { HotelManagementView } from './components/hotels/HotelManagementView';
@@ -96,7 +98,7 @@ export default function App() {
   // Core data. Each of these reads from, and writes back to, the shared
   // agency database — the hook has the same shape as useState, so every screen
   // below works exactly as it did when the data was local.
-  const { user, status: saveStatus, lastError, dismissError, canEditRecords } = useWorkspace();
+  const { user, reload: reloadWorkspace, status: saveStatus, lastError, dismissError, canEditRecords } = useWorkspace();
   const [rolesVersion, setRolesVersion] = useState(0);
 
   useEffect(() => {
@@ -2198,6 +2200,7 @@ export default function App() {
             />
           )}
 
+          {effectiveTab === 'packages' && canPrepareTrip(role) && <TripPreparationDesk hotels={hotels} clients={[...tourists,...persistedClients]} vehicles={vehicles} onFiled={reloadWorkspace}/> }
           {effectiveTab === 'packages' && (
             <TourPackagesView
               packages={packages}

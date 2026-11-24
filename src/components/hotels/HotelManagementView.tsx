@@ -144,7 +144,7 @@ export const HotelManagementView: React.FC<HotelManagementViewProps> = ({
     const rate =
       r.commissionRatePercent !== undefined
         ? Number(r.commissionRatePercent)
-        : hotels.find((h) => h.id === r.hotelId)?.defaultCommissionPercent ?? 10;
+        : hotels.find((h) => h.id === r.hotelId)?.defaultCommissionPercent ?? 0;
     const eligible = r.commissionEligibleAmount !== undefined ? Number(r.commissionEligibleAmount) : gross;
     const commission =
       r.calculatedCommissionUSD !== undefined
@@ -759,7 +759,7 @@ export const HotelManagementView: React.FC<HotelManagementViewProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[10px] font-bold">
-                          {hotel.defaultCommissionPercent ?? 10}% Partner Comm.
+                          {hotel.defaultCommissionPercent == null ? 'Commission unconfirmed' : hotel.defaultCommissionPercent + '% Partner Comm.'}
                         </span>
                         <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono text-[10px] font-bold">
                           {hotel.region}

@@ -1,3 +1,5 @@
+import { useWorkspace } from '../../lib/workspace';
+import { canEditRecord } from '../../../shared/roles';
 import React, { useState, useMemo } from 'react';
 import {
   CheckCircle2,
@@ -33,6 +35,18 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'urgent' | 'today' | 'snoozed' | 'completed'>('all');
   const [localTasks, setLocalTasks] = useState<Record<string, FeedTask>>({});
+
+  const { user, setCollection } = useWorkspace();
+  const storedIds = useMemo(() => new Set(tasks.map(t => t.id)), [tasks]);
+  const readOnlyTask = (task: FeedTask) => !onUpdateTask && storedIds.has(task.id) && !canEditRecord(user.role, 'feedTasks');
+  function updateTask(updated: FeedTask) {
+    if (!onUpdateTask && storedIds.has(updated.id)) {
+      if (!readOnlyTask(updated)) setCollection('feedTasks', rows => rows.map(r => r.id === updated.id ? {...r, ...updated} : r));
+      return;
+    }
+    setLocalTasks(prev => ({...prev, [updated.id]: updated}));
+    onUpdateTask?.(updated);
+  }
 
   // Synthesize and merge tasks from real operational data
   const combinedTasks = useMemo<FeedTask[]>(() => {
@@ -155,10 +169,9 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
       ...task,
       status: isCompleted ? 'pending' : 'completed',
       completedAt: isCompleted ? undefined : new Date().toISOString(),
-      completedBy: isCompleted ? undefined : 'Current User',
+      completedBy: isCompleted ? undefined : user.fullName,
     };
-    setLocalTasks((prev) => ({ ...prev, [task.id]: updated }));
-    if (onUpdateTask) onUpdateTask(updated);
+    updateTask(updated);
   };
 
   const handleSnooze = (task: FeedTask, hours: number) => {
@@ -169,8 +182,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
       snoozedUntil,
       due: snoozedUntil,
     };
-    setLocalTasks((prev) => ({ ...prev, [task.id]: updated }));
-    if (onUpdateTask) onUpdateTask(updated);
+    updateTask(updated);
   };
 
   const handleAssign = (task: FeedTask, assignedTo: string) => {
@@ -178,8 +190,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
       ...task,
       assignedTo,
     };
-    setLocalTasks((prev) => ({ ...prev, [task.id]: updated }));
-    if (onUpdateTask) onUpdateTask(updated);
+    updateTask(updated);
   };
 
   // Filter tasks based on active pill
@@ -303,6 +314,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
                 {/* Checkbox and Details */}
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <button
+                    disabled={readOnlyTask(task)}
                     onClick={() => handleToggleComplete(task)}
                     className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition cursor-pointer ${
                       isCompleted
@@ -375,6 +387,7 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
 
                   {/* Quick Snooze */}
                   <button
+                    disabled={readOnlyTask(task)}
                     onClick={() => handleSnooze(task, 2)}
                     className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium transition cursor-pointer"
                     title="Snooze 2 hours"
@@ -384,11 +397,13 @@ export const SecretaryActionQueue: React.FC<SecretaryActionQueueProps> = ({
 
                   {/* Assign to Guide / Driver */}
                   <select
+                    disabled={readOnlyTask(task)}
                     value={task.assignedTo || ''}
                     onChange={(e) => handleAssign(task, e.target.value)}
                     className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-[11px] text-slate-700 cursor-pointer focus:bg-white"
                   >
                     <option value="">Assign...</option>
+                    {task.assignedTo && !['Lead Tour Guide','Fleet Driver','Expedition Lead (Driver & Guide)','Desk Secretary','Operations Manager'].includes(task.assignedTo) && <option value={task.assignedTo}>{task.assignedTo}</option>}
                     <option value="Lead Tour Guide">Lead Tour Guide</option>
                     <option value="Fleet Driver">Fleet Driver</option>
                     <option value="Expedition Lead (Driver & Guide)">Driver & Guide (Dual)</option>

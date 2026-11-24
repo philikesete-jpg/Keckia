@@ -33,7 +33,10 @@ export type RoleKey =
   | "HR"
   | "GUIDE"
   | "DRIVER"
-  | "DRIVER_GUIDE";
+  | "DRIVER_GUIDE"
+  | "TICKETING"
+  | "HOTEL_RESERVATIONS"
+  | "STAFF_PENDING";
 
 export interface RoleDefinition {
   label: string;
@@ -155,6 +158,27 @@ export const DEFAULT_ROLES: Record<RoleKey, RoleDefinition> = {
       issueTicket: false, recordPayment: false, approveIssue: false,
       manageAccounts: false, viewAllBookings: false, exportReports: false,
     },
+  },
+  TICKETING: {
+    label: "Ticketing Agent",
+    description: "Creates passenger records and issues tickets from the ticketing desk.",
+    view: ["dashboard", "tickets", "messages"],
+    write: ["tickets", "messages"],
+    ownRecordsOnly: true,
+    can: { issueTicket: true, recordPayment: false, approveIssue: false, manageAccounts: false, viewAllBookings: false, exportReports: false },
+  },
+  HOTEL_RESERVATIONS: {
+    label: "Hotel Reservations",
+    description: "Handles lodging partners, room reservations, vouchers and guest arrangements.",
+    view: ["dashboard", "hotels", "messages"],
+    write: ["hotels", "messages"],
+    can: { issueTicket: false, recordPayment: false, approveIssue: false, manageAccounts: false, viewAllBookings: false, exportReports: false },
+  },
+  STAFF_PENDING: {
+    label: "Awaiting role assignment",
+    description: "Reserved for inactive staff accounts until an administrator assigns a working role.",
+    view: [], write: [],
+    can: { issueTicket: false, recordPayment: false, approveIssue: false, manageAccounts: false, viewAllBookings: false, exportReports: false },
   },
   DRIVER_GUIDE: {
     label: "Driver & Guide (Dual Role)",
@@ -402,6 +426,7 @@ export function isSystemCollection(collection: string): boolean {
 
 /** Whether `role` may change a record already stored in `collection`. */
 export function canEditRecord(role: RoleKey | string, collection: string): boolean {
+  if (role === "STAFF_PENDING") return false;
   if (isAdmin(role as RoleKey)) return true;
   if (isSystemCollection(collection)) return true;
   return false;
@@ -409,6 +434,7 @@ export function canEditRecord(role: RoleKey | string, collection: string): boole
 
 /** Whether `role` may delete a record already stored in `collection`. */
 export function canDeleteRecord(role: RoleKey | string, collection: string): boolean {
+  if (role === "STAFF_PENDING") return false;
   if (isAdmin(role as RoleKey)) return true;
   if (isSystemCollection(collection)) return true;
   return false;
@@ -454,6 +480,7 @@ export function canWrite(role: RoleKey | string, moduleKey: ModuleKey): boolean 
 }
 
 export function canReadCollection(role: RoleKey | string, collection: string): boolean {
+  if (role === "STAFF_PENDING") return false;
   const moduleKey = COLLECTION_MODULE[collection];
   if (!moduleKey) return false;
   // System settings fill drop-downs everywhere, so everyone signed in reads them.
@@ -464,6 +491,7 @@ export function canReadCollection(role: RoleKey | string, collection: string): b
 }
 
 export function canWriteCollection(role: RoleKey | string, collection: string): boolean {
+  if (role === "STAFF_PENDING") return false;
   const moduleKey = COLLECTION_MODULE[collection];
   if (!moduleKey) return false;
   // Changing how the system behaves is the administrator's alone.

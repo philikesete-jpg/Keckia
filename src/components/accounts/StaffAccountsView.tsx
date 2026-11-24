@@ -25,7 +25,7 @@ const emptyDraft = {
 
 export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ currentUserId }) => {
   const { collections } = useWorkspace();
-  const candidates: { name: string; role: RoleKey; note: string }[] =
+  const candidates: { name: string; email?: string; role: RoleKey; note: string }[] =
     (collections.departments || []).flatMap(d => d.onboardingCandidates || []);
   const [assignment, setAssignment] = useState<StaffAccount | null>(null);
   const [candidateNote, setCandidateNote] = useState('');
@@ -48,6 +48,19 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
   const [resetPassword, setResetPassword] = useState('');
   const [resetMustChange, setResetMustChange] = useState(true);
   const [resetting, setResetting] = useState(false);
+  const [issued, setIssued] = useState<{username: string; password: string} | null>(null);
+  const [issuing, setIssuing] = useState(false);
+
+  async function issueFirstPassword(account: StaffAccount) {
+    if (issuing || !account.active || !account.mustChangePassword || account.id === currentUserId) return;
+    setIssuing(true);
+    setIssued(null);
+    try {
+      const bytes = crypto.getRandomValues(new Uint8Array(24));
+      const password = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+      if (await patch(account, {password, mustChangePassword: true})) setIssued({username:account.username, password});
+    } finally {setIssuing(false);}
+  }
 
   const load = async () => {
     setLoading(true);
@@ -72,6 +85,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
     setError(null);
     try {
       const values = { ...draft, username: draft.username.trim().toLowerCase(), fullName: draft.fullName.trim(), email: draft.email.trim() };
+      if (values.role === 'STAFF_PENDING') throw new Error('Choose a working role before activating this account.');
       if (!values.fullName || !values.username) throw new Error('Enter a name and username.');
       if (assignment) {
         await api.patch('accounts/' + assignment.id, {fullName: values.fullName, email: values.email, role: values.role,
@@ -135,6 +149,12 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
         </dl>
       </section>
 
+      {issued && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="First password">
+        <h3 className="font-bold">First password for {issued.username}</h3>
+        <p className="mt-2 text-sm">Give this temporary password privately to the account holder. They choose their own password at first sign-in.</p>
+        <input aria-label="Issued temporary password" className="mt-2 w-full rounded border bg-white p-2 font-mono" value={issued.password} readOnly onFocus={e=>e.currentTarget.select()}/>
+        <button type="button" onClick={()=>setIssued(null)} className="mt-3 rounded border bg-white px-3 py-1 text-sm">Hide password</button>
+      </section>}
       {notice && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" /> {notice}
@@ -151,7 +171,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
             <select className="mt-1 block w-full rounded-lg border p-2" defaultValue="" onChange={e=>{
               const person=candidates.find(c=>c.name===e.target.value);
               if (!person) {setCandidateNote(''); return;}
-              setDraft(d=>({...d, fullName:person.name, role:person.role, username:assignment?.username || person.name.toLowerCase().replace(/[^a-z0-9.]/g,'')}));
+              setDraft(d=>({...d, fullName:person.name, role:person.role, email:assignment?.email || person.email || '', username:assignment?.username || person.email || person.name.toLowerCase().replace(/[^a-z0-9.]/g,'')}));
               setCandidateNote(person.note);
             }}>
               <option value="">Enter a staff member manually</option>
@@ -288,6 +308,8 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
                         >
                           <KeyRound className="h-3.5 w-3.5" /> Reset password
                         </button>
+                        {account.active && account.mustChangePassword && account.id !== currentUserId &&
+                          <button type="button" disabled={issuing} onClick={()=>issueFirstPassword(account)} className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold">Issue first password</button>}
                         {!account.active && account.id !== currentUserId && (
                           <button className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold" onClick={()=>{
                             setAssignment(account);
@@ -297,7 +319,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
                             setShowCreate(true);
                           }}>Assign and activate</button>
                         )}
-                        {account.id !== currentUserId && !(!account.active && account.fullName.includes('Awaiting assignment')) && (
+                        {account.id !== currentUserId && !(!account.active && (account.role === 'STAFF_PENDING' || account.fullName.includes('Awaiting assignment'))) && (
                           <button
                             onClick={() => patch(account, { active: !account.active })}
                             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold cursor-pointer ${

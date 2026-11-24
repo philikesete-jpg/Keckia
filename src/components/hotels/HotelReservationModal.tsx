@@ -87,8 +87,8 @@ export const HotelReservationModal: React.FC<HotelReservationModalProps> = ({
   >('Confirmed');
   const [airportTransfer, setAirportTransfer] = useState<boolean>(true);
   const [specialRequests, setSpecialRequests] = useState<string>('');
-  const [commissionRatePercent, setCommissionRatePercent] = useState<number>(
-    selectedHotel?.defaultCommissionPercent ?? 10
+  const [commissionRatePercent, setCommissionRatePercent] = useState<number | ''>(
+    selectedHotel?.defaultCommissionPercent ?? ''
   );
   const [customEligibleAmount, setCustomEligibleAmount] = useState<string>('');
   const [commissionSettlementStatus, setCommissionSettlementStatus] = useState<
@@ -142,9 +142,9 @@ export const HotelReservationModal: React.FC<HotelReservationModalProps> = ({
     const htl = hotels.find((h) => h.id === hotelId);
     if (htl) {
       if (htl.roomTypes.length > 0) {
-        setSelectedRoomTypeId(htl.roomTypes[0].id);
+        setSelectedRoomTypeId(htl.roomTypes[0]?.id || '');
       }
-      setCommissionRatePercent(htl.defaultCommissionPercent ?? 10);
+      setCommissionRatePercent(htl.defaultCommissionPercent ?? '');
     }
   };
 
@@ -184,7 +184,7 @@ export const HotelReservationModal: React.FC<HotelReservationModalProps> = ({
       assignedRoomNumber: `Rm-${Math.floor(100 + Math.random() * 400)}`,
       voucherIssuedAt: new Date().toISOString().split('T')[0],
       airportTransferIncluded: airportTransfer,
-      commissionRatePercent: Number(commissionRatePercent) || 0,
+      commissionRatePercent: commissionRatePercent === '' ? undefined : Number(commissionRatePercent),
       commissionEligibleAmount,
       calculatedCommissionUSD,
       supplierPayableUSD,
@@ -542,11 +542,11 @@ export const HotelReservationModal: React.FC<HotelReservationModalProps> = ({
                   max="100"
                   step="0.5"
                   value={commissionRatePercent}
-                  onChange={(e) => setCommissionRatePercent(Number(e.target.value))}
+                  onChange={(e) => setCommissionRatePercent(e.target.value === '' ? '' : Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-white border border-emerald-200 font-mono font-bold text-slate-900"
                 />
                 <span className="text-[10px] text-emerald-700 block mt-0.5">
-                  Hotel default: {selectedHotel?.defaultCommissionPercent ?? 10}%
+                  {selectedHotel?.defaultCommissionPercent == null ? 'Hotel rate awaiting agreement' : 'Hotel default: '+selectedHotel.defaultCommissionPercent+'%'}
                 </span>
               </div>
 

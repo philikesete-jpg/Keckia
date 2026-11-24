@@ -34,46 +34,19 @@ export const AddEditHotelModal: React.FC<AddEditHotelModalProps> = ({
   const [nameTigrinya, setNameTigrinya] = useState(hotelToEdit?.nameTigrinya || '');
   const [city, setCity] = useState(hotelToEdit?.city || 'Asmara');
   const [region, setRegion] = useState(hotelToEdit?.region || 'Central (Maekel)');
-  const [starRating, setStarRating] = useState<number>(hotelToEdit?.starRating || 4);
-  const [defaultCommissionPercent, setDefaultCommissionPercent] = useState<number>(
-    hotelToEdit?.defaultCommissionPercent ?? 10
+  const [starRating, setStarRating] = useState<number>(hotelToEdit?.starRating || 0);
+  const [defaultCommissionPercent, setDefaultCommissionPercent] = useState<number | ''>(
+    hotelToEdit?.defaultCommissionPercent ?? ''
   );
   const [address, setAddress] = useState(hotelToEdit?.address || '');
-  const [phone, setPhone] = useState(hotelToEdit?.phone || '+291 1 ');
+  const [phone, setPhone] = useState(hotelToEdit?.phone || '');
   const [email, setEmail] = useState(hotelToEdit?.email || '');
   const [image, setImage] = useState(hotelToEdit?.image || '');
   const [description, setDescription] = useState(hotelToEdit?.description || '');
   const [amenitiesInput, setAmenitiesInput] = useState(
-    hotelToEdit?.amenities.join(', ') ||
-      'High-Speed Wi-Fi, 24/7 Power Backup, Restaurant & Bar, Airport Shuttle, Air Conditioning'
+    hotelToEdit?.amenities?.join(', ') || ''
   );
-
-  const [roomTypes, setRoomTypes] = useState<HotelRoomType[]>(
-    hotelToEdit?.roomTypes || [
-      {
-        id: `rm-${Date.now()}-1`,
-        name: 'Executive Deluxe Suite',
-        pricePerNightUSD: 140,
-        pricePerNightNFA: 2100,
-        capacity: 2,
-        totalRooms: 20,
-        availableRooms: 8,
-        bedType: '1 King Bed',
-        features: ['City View Balcony', 'En-suite Marble Bath', 'Work Desk', 'Mini Fridge'],
-      },
-      {
-        id: `rm-${Date.now()}-2`,
-        name: 'Standard Heritage Twin',
-        pricePerNightUSD: 95,
-        pricePerNightNFA: 1425,
-        capacity: 2,
-        totalRooms: 30,
-        availableRooms: 12,
-        bedType: '2 Twin Beds',
-        features: ['Air Conditioning', 'Satellite TV', 'Luggage Rack'],
-      },
-    ]
-  );
+  const [roomTypes, setRoomTypes] = useState<HotelRoomType[]>(hotelToEdit?.roomTypes || []);
 
   // New room state
   const [newRoomName, setNewRoomName] = useState('');
@@ -136,34 +109,21 @@ export const AddEditHotelModal: React.FC<AddEditHotelModalProps> = ({
       .filter(Boolean);
 
     const updatedHotel: Hotel = {
+      ...hotelToEdit,
       id: hotelToEdit?.id || `htl-${Date.now()}`,
       name: name.trim(),
       nameTigrinya: nameTigrinya.trim() || `ሆቴል ${name.trim()}`,
       city,
       region,
       starRating,
-      defaultCommissionPercent: Number(defaultCommissionPercent) || 0,
+      defaultCommissionPercent: defaultCommissionPercent === '' ? undefined : Number(defaultCommissionPercent),
       address: address.trim() || `${city}, Eritrea`,
       phone: phone.trim(),
-      email: email.trim() || `info@${name.toLowerCase().replace(/[^a-z0-9]/g, '')}.er`,
+      email: email.trim(),
       image: image.trim(),
-      description:
-        description.trim() ||
-        `Hospitality and accommodation partner located in ${city}, providing quality lodging for tour groups, international visitors, and expeditions.`,
-      amenities: amenities.length > 0 ? amenities : ['High-Speed Wi-Fi', '24/7 Power Backup', 'Restaurant'],
-      roomTypes: roomTypes.length > 0 ? roomTypes : [
-        {
-          id: `rm-def-1`,
-          name: 'Standard Heritage Room',
-          pricePerNightUSD: 90,
-          pricePerNightNFA: 1350,
-          capacity: 2,
-          totalRooms: 20,
-          availableRooms: 10,
-          bedType: '1 Double Bed',
-          features: ['Air Conditioning', 'En-suite Bathroom'],
-        },
-      ],
+      description: description.trim(),
+      amenities,
+      roomTypes,
     };
 
     onSaveHotel(updatedHotel);
@@ -266,7 +226,7 @@ export const AddEditHotelModal: React.FC<AddEditHotelModalProps> = ({
                     </button>
                   ))}
                   <span className="text-xs text-slate-600 font-bold ml-2">
-                    {starRating}-Star Standard
+                    {starRating ? starRating + '-Star Standard' : 'Unverified'}
                   </span>
                 </div>
               </div>
@@ -282,7 +242,7 @@ export const AddEditHotelModal: React.FC<AddEditHotelModalProps> = ({
                     max="100"
                     step="0.5"
                     value={defaultCommissionPercent}
-                    onChange={(e) => setDefaultCommissionPercent(Number(e.target.value))}
+                    onChange={(e) => setDefaultCommissionPercent(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-emerald-900 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">

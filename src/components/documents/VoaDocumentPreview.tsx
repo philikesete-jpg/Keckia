@@ -15,6 +15,16 @@ export const VoaDocumentPreview: React.FC<VoaDocumentPreviewProps> = ({
   onPrint,
   onApprove,
 }) => {
+  if (doc.tripPacketId && doc.notes) return (
+    <section className="space-y-4">
+      <button className="rounded-lg border px-3 py-2" onClick={()=>printElement('printable-voa-letter', doc.docNumber)}>Print request / save PDF</button>
+      <article id="printable-voa-letter" className="rounded-lg border bg-white p-6">
+        <small>{doc.docNumber} · {doc.letterDate} · {doc.issuanceStatus}</small>
+        <h2 className="my-3 text-xl font-bold">Visa-on-arrival sponsorship request</h2>
+        <div className="whitespace-pre-wrap leading-relaxed" style={{whiteSpace:'pre-wrap'}}>{doc.notes}</div>
+      </article>
+    </section>
+  );
   const handlePrint = () => {
     if (onPrint) {
       onPrint();

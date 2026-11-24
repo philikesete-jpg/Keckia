@@ -877,6 +877,7 @@ export interface VoaTouristRow {
 }
 
 export interface VisaOnArrivalDoc {
+  tripPacketId?: string;
   id: string;
   docNumber: string;
   referenceNumber?: string;
@@ -957,6 +958,8 @@ export interface PermitDriverRow {
 }
 
 export interface RegionalPermitDoc {
+  tripPacketId?: string;
+  notes?: string;
   id: string;
   permitNumber: string;
   referenceNumber?: string;
